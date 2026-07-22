@@ -20,6 +20,7 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
   const jumpPositionsRef = useRef({});
   const optionsContainerRef = useRef(null);
   const stepTimerRef = useRef(null);
+  const videoTimerRef = useRef(null);
   const bgmStartTimeRef = useRef(null);
   const bgmIndexRef = useRef(0);
 
@@ -239,7 +240,14 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
         clearTimeout(fadeInTimer);
         clearTimeout(fadeOutTimer);
         clearTimeout(stepTimerRef.current);
+        clearTimeout(videoTimerRef.current);
       };
+    }
+
+    if (currentStep.type === 'video') {
+      const videoDuration = (currentStep.content.videoDuration || 10) * 1000;
+      videoTimerRef.current = setTimeout(goToNextStep, videoDuration);
+      return () => clearTimeout(videoTimerRef.current);
     }
 
     if (currentStep.type === 'question') {
@@ -248,9 +256,12 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
     }
   }, [currentStepIndex, isStarted]);
 
-  // BGM Timeline logic
+  // BGM logic: global timeline + per-step override
   const bgmTimeline = settings.bgm_timeline || [];
-  const getCurrentBgm = () => {
+  const stepBgmUrl = currentStep?.content?.bgm_url || '';
+  const isVideoStep = currentStep?.type === 'video';
+
+  const getGlobalBgm = () => {
     if (!isStarted || bgmTimeline.length === 0) return '';
     const elapsed = (Date.now() - (bgmStartTimeRef.current || Date.now())) / 1000;
     let accumulated = 0;
@@ -268,7 +279,10 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
     return bgmTimeline[bgmTimeline.length - 1]?.url || '';
   };
 
-  const currentBgmUrl = getCurrentBgm();
+  // Pause global BGM when step has its own BGM or is a video step
+  const shouldPauseGlobalBgm = isVideoStep || (stepBgmUrl !== '');
+  const globalBgmUrl = shouldPauseGlobalBgm ? '' : getGlobalBgm();
+  const activeBgmUrl = stepBgmUrl || globalBgmUrl;
 
   // Render Cover / Start Screen
   if (!isStarted) {
@@ -534,13 +548,13 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
 
         {/* VIDEO STEP */}
         {currentStep.type === 'video' && (
-          <div className="w-full max-w-4xl mx-auto aspect-video rounded-2xl overflow-hidden border border-zinc-800 bg-black shadow-2xl relative">
+          <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
             <video
               src={currentStep.content.videoUrl}
               autoPlay
               controls
-              onEnded={goToNextStep}
               className="w-full h-full object-contain"
+              onEnded={goToNextStep}
             />
           </div>
         )}
@@ -554,7 +568,11 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
         />
       </div>
 
-      {currentBgmUrl && <AudioPlayer src={currentBgmUrl} />}
+      {/* Global BGM AudioPlayer (paused when step has its own BGM or video) */}
+      {globalBgmUrl && <AudioPlayer src={globalBgmUrl} paused={shouldPauseGlobalBgm} />}
+
+      {/* Step-specific BGM AudioPlayer */}
+      {stepBgmUrl && !isVideoStep && <AudioPlayer src={stepBgmUrl} />}
     </div>
   );
 }

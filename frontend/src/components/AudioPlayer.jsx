@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Volume2, VolumeX, Music } from 'lucide-react';
 
-export default function AudioPlayer({ src }) {
+export default function AudioPlayer({ src, paused = false }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [hasSrc, setHasSrc] = useState(!!src);
@@ -18,12 +18,22 @@ export default function AudioPlayer({ src }) {
     }
   };
 
+  const attemptPause = () => {
+    if (!audioRef.current) return;
+    audioRef.current.pause();
+    setIsPlaying(false);
+  };
+
   useEffect(() => {
     setHasSrc(!!src);
-    attemptPlay();
+    if (paused) {
+      attemptPause();
+    } else {
+      attemptPlay();
+    }
 
     const onInteraction = () => {
-      attemptPlay();
+      if (!paused) attemptPlay();
       document.removeEventListener('click', onInteraction);
       document.removeEventListener('touchstart', onInteraction);
       document.removeEventListener('keydown', onInteraction);
@@ -37,7 +47,7 @@ export default function AudioPlayer({ src }) {
       document.removeEventListener('touchstart', onInteraction);
       document.removeEventListener('keydown', onInteraction);
     };
-  }, [src]);
+  }, [src, paused]);
 
   const togglePlay = () => {
     if (!audioRef.current || !src) return;

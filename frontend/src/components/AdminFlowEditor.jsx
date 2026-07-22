@@ -663,6 +663,20 @@ export default function AdminFlowEditor({ token, steps: initialSteps, onSaveSucc
                       可在「系統設定與上傳」分頁中上傳本地 MP4 影片，並將連結複製至此。
                     </p>
                   </div>
+
+                  <div>
+                    <label className="text-xs font-mono text-zinc-400 block mb-1">播放秒數 (自動跳下一關)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={activeStep.content.videoDuration || 10}
+                      onChange={(e) => updateActiveContent({ videoDuration: parseInt(e.target.value) || 10 })}
+                      className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white"
+                    />
+                    <p className="text-[10px] text-zinc-500 mt-1 font-mono">
+                      影片播放到此秒數後會自動跳到下一關。影片本身也可手動控制播放。
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
