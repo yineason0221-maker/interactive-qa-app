@@ -11,17 +11,18 @@ router.post('/start', (req, res) => {
   }
 
   try {
+    const now = db.prepare("SELECT strftime('%Y-%m-%dT%H:%M:%S', 'now', 'localtime') as now").get().now;
     const stmt = db.prepare(`
       INSERT INTO sessions (session_id, start_time, device_info)
-      VALUES (?, CURRENT_TIMESTAMP, ?)
-      ON CONFLICT(session_id) DO UPDATE SET start_time=CURRENT_TIMESTAMP
+      VALUES (?, ?, ?)
+      ON CONFLICT(session_id) DO UPDATE SET start_time=?
     `);
-    stmt.run(sessionId, deviceInfo || '');
+    stmt.run(sessionId, now, deviceInfo || '', now);
 
-    return res.json({ success: true, sessionId });
+    return res.json({ success: true, sessionId, startTime: now });
   } catch (err) {
     console.error('Error starting session:', err);
-    return res.status(500).json({ error: '無法初始化 Session' });
+    return res.status(500).json({ error: '建立 session 失敗' });
   }
 });
 
@@ -77,24 +78,17 @@ router.post('/finish', (req, res) => {
   }
 
   try {
-    const session = db.prepare('SELECT start_time FROM sessions WHERE session_id = ?').get(sessionId);
-    
-    let durationSeconds = 0;
-    if (session && session.start_time) {
-      const startTime = new Date(session.start_time);
-      const endTime = new Date();
-      durationSeconds = Math.max(0, Math.round((endTime - startTime) / 1000));
-    }
-
-    db.prepare(`
+    const result = db.prepare(`
       UPDATE sessions
-      SET end_time = CURRENT_TIMESTAMP,
-          duration_seconds = ?,
+      SET end_time = strftime('%Y-%m-%dT%H:%M:%S', 'now', 'localtime'),
+          duration_seconds = CAST(ROUND((julianday('now', 'localtime') - julianday(start_time)) * 86400) AS INTEGER),
           nickname = COALESCE(?, nickname)
       WHERE session_id = ?
-    `).run(durationSeconds, nickname || null, sessionId);
+    `).run(nickname || null, sessionId);
 
-    return res.json({ success: true, durationSeconds });
+    const updated = db.prepare('SELECT duration_seconds FROM sessions WHERE session_id = ?').get(sessionId);
+
+    return res.json({ success: true, durationSeconds: updated?.duration_seconds || 0 });
   } catch (err) {
     console.error('Error finishing session:', err);
     return res.status(500).json({ error: '更新完成狀態失敗' });
@@ -143,7 +137,7 @@ router.get('/incomplete', verifyAdminToken, (req, res) => {
   try {
     const incomplete = db.prepare(`
       SELECT s.*,
-        ROUND((julianday('now') - julianday(s.start_time)) * 86400) as dwell_seconds
+        ROUND((julianday('now', 'localtime') - julianday(s.start_time)) * 86400) as dwell_seconds
       FROM sessions s
       WHERE s.end_time IS NULL OR s.end_time = ''
       ORDER BY s.start_time DESC

@@ -48,7 +48,7 @@ router.post('/change-password', verifyAdminToken, (req, res) => {
   }
 
   const newHash = bcrypt.hashSync(newPassword, 10);
-  db.prepare('UPDATE admin SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1').run(newHash);
+      db.prepare('UPDATE admin SET password_hash = ?, updated_at = strftime(\'%Y-%m-%dT%H:%M:%S\', \'now\', \'localtime\') WHERE id = 1').run(newHash);
 
   return res.json({
     success: true,
