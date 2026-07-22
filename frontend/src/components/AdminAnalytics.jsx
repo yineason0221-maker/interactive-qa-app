@@ -63,7 +63,17 @@ export default function AdminAnalytics({ token }) {
     return isNaN(d.getTime()) ? new Date(timeStr) : d;
   };
 
-  const formatDuration = (seconds) => {
+  const formatDuration = (seconds, startTime, endTime) => {
+    if (endTime) {
+      const start = startTime ? new Date(startTime).getTime() : 0;
+      const end = new Date(endTime).getTime();
+      if (start > 0 && end > start) {
+        const computed = Math.round((end - start) / 1000);
+        const m = Math.floor(computed / 60);
+        const s = computed % 60;
+        return m > 0 ? `${m} 分 ${s} 秒` : `${s} 秒`;
+      }
+    }
     if (!seconds && seconds !== 0) return '未完成 / 作答中';
     if (seconds === null || seconds === undefined) return '進行中...';
     const m = Math.floor(seconds / 60);
@@ -260,7 +270,7 @@ export default function AdminAnalytics({ token }) {
                     </span>
                     <span className={`text-lg font-bold font-mono ${!selectedSession.end_time ? 'text-yellow-300' : 'text-white'}`}>
                       {selectedSession.end_time
-                        ? formatDuration(selectedSession.duration_seconds)
+                        ? formatDuration(selectedSession.duration_seconds, selectedSession.start_time, selectedSession.end_time)
                         : formatDwellTime(selectedSession.dwell_seconds || (Math.round((Date.now() - parseLocalDateTime(selectedSession.start_time).getTime()) / 1000)))
                       }
                     </span>
