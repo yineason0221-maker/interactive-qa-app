@@ -16,6 +16,7 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
   const [startTime, setStartTime] = useState(null);
 
   const [jumpClicks, setJumpClicks] = useState({});
+  const [jumpPositions, setJumpPositions] = useState({});
   const optionsContainerRef = useRef(null);
   const stepTimerRef = useRef(null);
   const bgmStartTimeRef = useRef(null);
@@ -35,6 +36,13 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
       hash = hash & hash;
     }
     return Math.abs(hash);
+  };
+
+  const getRandomPosition = (containerW, containerH) => {
+    const padding = 140;
+    const x = padding + Math.random() * Math.max(containerW - padding * 2 - 200, 100);
+    const y = padding + Math.random() * Math.max(containerH - padding * 2 - 60, 60);
+    return { x: Math.round(x), y: Math.round(y) };
   };
 
   const playOptionSound = (url) => {
@@ -57,11 +65,11 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
       const newCount = (prev[opt] || 0) + 1;
       if (newCount >= clicksNeeded) {
         onLogEvent('JUMP_CAPTURED', `Captured "${opt}" after ${clicksNeeded} clicks`);
+        setJumpPositions({});
         handleOptionSelected(opt, meta);
       } else {
         onLogEvent('JUMP_CLICK', `Clicked "${opt}" (${newCount}/${clicksNeeded})`);
-        // Randomize position on each click
-        setOptionPositions(pos => ({
+        setJumpPositions(pos => ({
           ...pos,
           [opt]: getRandomPosition()
         }));
@@ -194,6 +202,7 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
   useEffect(() => {
     if (!isStarted || !currentStep) return;
     setJumpClicks({});
+    setJumpPositions({});
     setSubtitleOpacity(0);
   }, [currentStepIndex, isStarted]);
 
@@ -367,61 +376,65 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
             )}
 
             {currentStep.content.questionType === 'single_choice' && options.length > 0 && (
-              <div className="relative max-w-3xl mx-auto pt-4" ref={optionsContainerRef}>
-                {options.map((opt, idx) => {
-                  const meta = optionMeta[opt] || {};
-                  const behavior = meta.behavior === 'jump' ? 'jump' : 'normal';
-                  const clicksNeeded = meta.clicksNeeded || 1;
-                  const currentClicks = jumpClicks[opt] || 0;
-                  const isCaptured = currentClicks >= clicksNeeded;
+              <div className="relative max-w-5xl mx-auto pt-4" ref={optionsContainerRef}>
+                <div className="flex flex-wrap justify-center gap-4">
+                  {options.map((opt, idx) => {
+                    const meta = optionMeta[opt] || {};
+                    const behavior = meta.behavior === 'jump' ? 'jump' : 'normal';
+                    const clicksNeeded = meta.clicksNeeded || 3;
+                    const currentClicks = jumpClicks[opt] || 0;
+                    const isJumping = behavior === 'jump' && currentClicks > 0 && currentClicks < clicksNeeded;
+                    const isCaptured = behavior === 'jump' && currentClicks >= clicksNeeded;
 
-                  if (behavior === 'jump' && !isCaptured) {
-                    const rect = optionsContainerRef.current?.getBoundingClientRect();
-                    const cw = rect ? rect.width : 600;
-                    const ch = rect ? rect.height : 500;
-                    const pad = 120;
-                    const cx = cw / 2;
-                    const cy = ch / 2;
-                    const radius = Math.min(cw, ch) * 0.35;
-                    const angle = ((hashStr(opt + currentStepIndex + currentClicks) % 360) * Math.PI) / 180;
-                    const dist = radius * (0.5 + ((hashStr(opt + 'd' + currentClicks) % 100) / 100) * 0.5);
-                    const posX = cx + Math.cos(angle) * dist;
-                    const posY = cy + Math.sin(angle) * dist;
+                    if (isJumping) return null;
 
+                    const hasBranch = meta.nextStepId || (currentStep.content.branches && currentStep.content.branches[opt]);
                     return (
                       <button
                         key={idx}
-                        onClick={(e) => { e.stopPropagation(); handleJumpOptionClick(opt, meta); }}
-                        className="p-5 border-2 border-zinc-600 bg-zinc-900/90 rounded-2xl hover:border-white transition-all text-lg font-medium text-white shadow-2xl"
-                        style={{
-                          position: 'absolute',
-                          left: posX + 'px',
-                          top: posY + 'px',
-                          transform: 'translate(-50%, -50%)',
-                          transition: 'all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
-                          zIndex: 10,
-                          minWidth: '180px',
-                          animation: 'pulse-glow 2s ease-in-out infinite',
-                        }}
+                        onClick={() => behavior === 'jump' ? handleJumpOptionClick(opt, meta) : handleOptionSelected(opt, meta)}
+                        className={`px-8 py-4 rounded-2xl border transition-all text-lg font-medium text-white flex items-center gap-2 ${
+                          isCaptured
+                            ? 'border-green-500 bg-green-950/60 text-green-200'
+                            : 'border-zinc-800 bg-zinc-950/80 hover:border-white hover:bg-zinc-900'
+                        }`}
                       >
-                        <div className="text-center">
-                          <div>{opt}</div>
-                        </div>
+                        <span>{opt}</span>
+                        {hasBranch && <span className="text-[10px] text-zinc-500 font-mono">BRANCH</span>}
                       </button>
                     );
-                  }
+                  })}
+                </div>
 
-                  const hasBranch = meta.nextStepId || (currentStep.content.branches && currentStep.content.branches[opt]);
+                {options.map((opt, idx) => {
+                  const meta = optionMeta[opt] || {};
+                  if (meta.behavior !== 'jump') return null;
+                  const currentClicks = jumpClicks[opt] || 0;
+                  if (currentClicks === 0) return null;
+
+                  const rect = optionsContainerRef.current?.getBoundingClientRect();
+                  const cw = rect ? rect.width : 800;
+                  const ch = rect ? rect.height : 500;
+                  const pos = jumpPositions[opt] || getRandomPosition(cw, ch);
+
                   return (
                     <button
-                      key={idx}
-                      onClick={() => handleOptionSelected(opt, meta)}
-                      className="p-6 text-left border border-zinc-800 bg-zinc-950/80 rounded-2xl hover:border-white hover:bg-zinc-900 transition-all text-xl font-medium text-white flex items-center justify-between group"
+                      key={`j-${idx}`}
+                      onClick={(e) => { e.stopPropagation(); handleJumpOptionClick(opt, meta); }}
+                      className="p-5 border-2 border-zinc-600 bg-zinc-900/90 rounded-2xl hover:border-white transition-all text-lg font-medium text-white shadow-2xl"
+                      style={{
+                        position: 'absolute',
+                        left: pos.x + 'px',
+                        top: pos.y + 'px',
+                        transform: 'translate(-50%, -50%)',
+                        transition: 'all 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                        zIndex: 10,
+                        minWidth: '160px',
+                        animation: 'pulse-glow 2s ease-in-out infinite',
+                      }}
                     >
-                      <span>{opt}</span>
-                      <div className="flex items-center gap-2">
-                        {hasBranch && <span className="text-[10px] text-zinc-500 font-mono">BRANCH</span>}
-                        <ChevronRight className="w-5 h-5 text-zinc-600 group-hover:text-white transition-colors" />
+                      <div className="text-center">
+                        <div>{opt}</div>
                       </div>
                     </button>
                   );
