@@ -198,9 +198,10 @@ router.post('/import-zip', verifyAdminToken, zipUpload.single('backup'), (req, r
     const zip = new AdmZip(backupFile.data);
     const entries = zip.getEntries();
 
-    const backupJsonEntry = entries.find(e => e.entryName === 'backup.json');
+    const backupJsonEntry = entries.find(e => !e.isDirectory && e.entryName.replace(/^\.\//, '').split('/').pop() === 'backup.json');
     if (!backupJsonEntry) {
-      return res.status(400).json({ error: '備份檔案中缺少 backup.json' });
+      const names = entries.map(e => e.entryName).join(', ');
+      return res.status(400).json({ error: `備份檔案中缺少 backup.json，zip 內容: ${names}` });
     }
 
     const backupData = JSON.parse(backupJsonEntry.getData().toString('utf8'));
