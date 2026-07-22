@@ -26,6 +26,16 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
     return currentStepIndex === 0 || step.title.includes('暱稱') || step.title.includes('名字');
   };
 
+  const hashStr = (str) => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return Math.abs(hash);
+  };
+
   const playOptionSound = (url) => {
     if (!url) return;
     try {
@@ -333,7 +343,7 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
             )}
 
             {currentStep.content.questionType === 'single_choice' && options.length > 0 && (
-              <div className="relative max-w-3xl mx-auto pt-4" ref={optionContainerRef} style={{ minHeight: '500px' }}>
+              <div className="relative max-w-3xl mx-auto pt-4" ref={optionsContainerRef} style={{ minHeight: options.some(o => (optionMeta[o] || {}).behavior === 'escape') ? '500px' : 'auto' }}>
                 {/* Normal options in grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {options.map((opt, idx) => {
@@ -365,11 +375,13 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
                   const currentClicks = escapeClicks[opt] || 0;
 
                   const rect = optionsContainerRef.current?.getBoundingClientRect();
-                  const containerW = rect ? rect.width : 600;
-                  const containerH = rect ? rect.height : 500;
-                  const padding = 120;
-                  const posX = padding + (((opt.charCodeAt(0) * 37 + currentStepIndex * 73 + currentClicks * 97) % 100) / 100) * (containerW - padding * 2 - 180);
-                  const posY = padding + (((opt.charCodeAt(1 || 0) * 41 + currentStepIndex * 53 + currentClicks * 61) % 100) / 100) * (containerH - padding * 2 - 60);
+                  const cw = rect ? rect.width : 600;
+                  const ch = rect ? rect.height : 500;
+                  const pad = 140;
+                  const randX = (hashStr(opt + currentStepIndex + currentClicks) % 100) / 100;
+                  const randY = (hashStr(opt + 'y' + currentStepIndex * 2 + currentClicks * 3) % 100) / 100;
+                  const posX = pad + randX * Math.max(cw - pad * 2 - 200, 100);
+                  const posY = pad + randY * Math.max(ch - pad * 2 - 80, 60);
 
                   return (
                     <button

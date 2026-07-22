@@ -177,6 +177,94 @@ export default function AdminFlowEditor({ token, steps: initialSteps, onSaveSucc
 
   const activeStep = steps[activeStepIndex];
 
+  const renderOptionMetaEditor = () => {
+    if (activeStep.content.questionType !== 'single_choice') return null;
+    const currentOptionMeta = activeStep.content.optionMeta || {};
+    const stepIds = steps.map(s => ({ id: s.id, title: s.title }));
+
+    return (
+      <div className="mt-4 pt-4 border-t border-zinc-800 space-y-3">
+        <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1">
+          <Volume2 className="w-3.5 h-3.5" />
+          選項進階設定 (音效 / 亂跑 / 點擊次數 / 分支路由)
+        </h4>
+        {(activeStep.content.options || []).map((opt, oIdx) => {
+          const meta = currentOptionMeta[opt] || { behavior: 'normal', clicksNeeded: 1, nextStepId: null, soundEffect: '' };
+          return (
+            <div key={`meta-${oIdx}`} className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 space-y-2">
+              <div className="text-xs font-mono text-white font-bold truncate">{opt}</div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div>
+                  <label className="text-[10px] text-zinc-500 block mb-0.5">行為</label>
+                  <select
+                    value={meta.behavior || 'normal'}
+                    onChange={(e) => {
+                      const newMeta = { ...currentOptionMeta, [opt]: { ...meta, behavior: e.target.value } };
+                      updateActiveContent({ optionMeta: newMeta });
+                    }}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-white"
+                  >
+                    <option value="normal">一般 (Normal)</option>
+                    <option value="escape">亂跑 (Escape)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-zinc-500 block mb-0.5">點擊次數門檻</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={meta.clicksNeeded || 1}
+                    onChange={(e) => {
+                      const newMeta = { ...currentOptionMeta, [opt]: { ...meta, clicksNeeded: parseInt(e.target.value) || 1 } };
+                      updateActiveContent({ optionMeta: newMeta });
+                    }}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-zinc-500 block mb-0.5">分支到關卡 ID</label>
+                  <select
+                    value={meta.nextStepId || ''}
+                    onChange={(e) => {
+                      const newMeta = { ...currentOptionMeta, [opt]: { ...meta, nextStepId: e.target.value ? parseInt(e.target.value) : null } };
+                      updateActiveContent({ optionMeta: newMeta });
+                    }}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-white"
+                  >
+                    <option value="">→ 下一關 (預設)</option>
+                    {stepIds.map(s => (
+                      <option key={s.id} value={s.id}>→ {s.title} (ID: {s.id})</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-zinc-500 block mb-0.5">點擊音效 URL</label>
+                  <div className="flex gap-1">
+                    <input
+                      type="text"
+                      placeholder="/uploads/click.mp3"
+                      value={meta.soundEffect || ''}
+                      onChange={(e) => {
+                        const newMeta = { ...currentOptionMeta, [opt]: { ...meta, soundEffect: e.target.value } };
+                        updateActiveContent({ optionMeta: newMeta });
+                      }}
+                      className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-[10px] text-white min-w-0"
+                    />
+                    <label className="cursor-pointer px-1.5 bg-zinc-800 hover:bg-zinc-700 rounded text-white whitespace-nowrap">
+                      <Volume2 className="w-3 h-3" />
+                      <input type="file" accept="audio/*" onChange={(ev) => handleSoundUpload(ev, opt, currentOptionMeta)} className="hidden" />
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   useEffect(() => {
     if (activeStep) {
       setBgmUrl(activeStep.content?.bgm_url || '');
@@ -184,8 +272,6 @@ export default function AdminFlowEditor({ token, steps: initialSteps, onSaveSucc
       setActiveTab('content');
     }
   }, [activeStepIndex]);
-
-  const handleFileUpload = async (e, type) => {
 
   return (
     <div className="space-y-6 text-zinc-100">
@@ -472,98 +558,12 @@ export default function AdminFlowEditor({ token, steps: initialSteps, onSaveSucc
                         <Plus className="w-3.5 h-3.5" /> 新增選項
                       </button>
                     </div>
-
-                    {/* Option Advanced Settings */}
-                    {(activeStep.content.questionType === 'single_choice') && (
-                      <div className="mt-4 pt-4 border-t border-zinc-800 space-y-3">
-                        <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1">
-                          <Volume2 className="w-3.5 h-3.5" />
-                          選項進階設定 (音效 / 亂跑 / 點擊次數 / 分支路由)
-                        </h4>
-
-                        {(() => {
-                          const currentOptionMeta = activeStep.content.optionMeta || {};
-                          const stepIds = steps.map(s => ({ id: s.id, title: s.title }));
-                          return (activeStep.content.options || []).map((opt, oIdx) => {
-                            const meta = currentOptionMeta[opt] || { behavior: 'normal', clicksNeeded: 1, nextStepId: null, soundEffect: '' };
-                            return (
-                              <div key={`meta-${oIdx}`} className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 space-y-2">
-                                <div className="text-xs font-mono text-white font-bold truncate">{opt}</div>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                  <div>
-                                    <label className="text-[10px] text-zinc-500 block mb-0.5">行為</label>
-                                    <select
-                                      value={meta.behavior || 'normal'}
-                                      onChange={(e) => {
-                                        const newMeta = { ...currentOptionMeta, [opt]: { ...meta, behavior: e.target.value } };
-                                        updateActiveContent({ optionMeta: newMeta });
-                                      }}
-                                      className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-white"
-                                    >
-                                      <option value="normal">一般 (Normal)</option>
-                                      <option value="escape">亂跑 (Escape)</option>
-                                    </select>
-                                  </div>
-                                  <div>
-                                    <label className="text-[10px] text-zinc-500 block mb-0.5">點擊次數門檻</label>
-                                    <input
-                                      type="number"
-                                      min={1}
-                                      max={20}
-                                      value={meta.clicksNeeded || 1}
-                                      onChange={(e) => {
-                                        const newMeta = { ...currentOptionMeta, [opt]: { ...meta, clicksNeeded: parseInt(e.target.value) || 1 } };
-                                        updateActiveContent({ optionMeta: newMeta });
-                                      }}
-                                      className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-white"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="text-[10px] text-zinc-500 block mb-0.5">分支到關卡 ID</label>
-                                    <select
-                                      value={meta.nextStepId || ''}
-                                      onChange={(e) => {
-                                        const newMeta = { ...currentOptionMeta, [opt]: { ...meta, nextStepId: e.target.value ? parseInt(e.target.value) : null } };
-                                        updateActiveContent({ optionMeta: newMeta });
-                                      }}
-                                      className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-white"
-                                    >
-                                      <option value="">→ 下一關 (預設)</option>
-                                      {stepIds.map(s => (
-                                        <option key={s.id} value={s.id}>→ {s.title} (ID: {s.id})</option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                  <div>
-                                    <label className="text-[10px] text-zinc-500 block mb-0.5">點擊音效 URL</label>
-                                    <div className="flex gap-1">
-                                      <input
-                                        type="text"
-                                        placeholder="/uploads/click.mp3"
-                                        value={meta.soundEffect || ''}
-                                        onChange={(e) => {
-                                          const newMeta = { ...currentOptionMeta, [opt]: { ...meta, soundEffect: e.target.value } };
-                                          updateActiveContent({ optionMeta: newMeta });
-                                        }}
-                                        className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-[10px] text-white min-w-0"
-                                      />
-                                      <label className="cursor-pointer px-1.5 bg-zinc-800 hover:bg-zinc-700 rounded text-white whitespace-nowrap">
-                                        <Volume2 className="w-3 h-3" />
-                                        <input type="file" accept="audio/*" onChange={(ev) => handleSoundUpload(ev, opt, currentOptionMeta)} className="hidden" />
-                                      </label>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          });
-                        })()}
-                      </div>
-                    )}
                   )}
+                  
+                  {renderOptionMetaEditor()}
                 </div>
               )}
-
+              
               {/* EFFECT EDITOR */}
               {activeStep.type === 'effect' && (
                 <div className="space-y-4">
