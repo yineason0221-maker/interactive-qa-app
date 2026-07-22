@@ -28,24 +28,26 @@ export default function AudioPlayer({ src, paused = false }) {
     setHasSrc(!!src);
     if (paused) {
       attemptPause();
-    } else {
-      attemptPlay();
+      return;
     }
 
-    const onInteraction = () => {
-      if (!paused) attemptPlay();
-      document.removeEventListener('click', onInteraction);
-      document.removeEventListener('touchstart', onInteraction);
-      document.removeEventListener('keydown', onInteraction);
+    attemptPlay();
+
+    const handleInteraction = () => {
+      attemptPlay();
+      document.removeEventListener('touchstart', handleInteraction);
+      document.removeEventListener('click', handleInteraction);
+      document.removeEventListener('touchend', handleInteraction);
     };
-    document.addEventListener('click', onInteraction);
-    document.addEventListener('touchstart', onInteraction);
-    document.addEventListener('keydown', onInteraction);
+
+    document.addEventListener('touchstart', handleInteraction, { once: false });
+    document.addEventListener('click', handleInteraction, { once: false });
+    document.addEventListener('touchend', handleInteraction, { once: false });
 
     return () => {
-      document.removeEventListener('click', onInteraction);
-      document.removeEventListener('touchstart', onInteraction);
-      document.removeEventListener('keydown', onInteraction);
+      document.removeEventListener('touchstart', handleInteraction);
+      document.removeEventListener('click', handleInteraction);
+      document.removeEventListener('touchend', handleInteraction);
     };
   }, [src, paused]);
 

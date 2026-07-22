@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    --vh: 1vh;
+  }
+  /* Chrome/Safari/Edge */
+  @supports (-webkit-touch-callout: none) or (not (-webkit-touch-callout: none)) {
+    :root {
+      --vh: 1dvh;
+    }
+  }
+}
+
 @layer utilities {
   /* Glitch Text Effect */
   .glitch-text {
@@ -48,6 +60,31 @@
   20%, 80% { transform: translate3d(2px, 0, 0); }
   30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
   40%, 60% { transform: translate3d(4px, 0, 0); }
+}
+
+/* iOS Safe Area & Viewport Fixes */
+@supports (-webkit-touch-callout: none) {
+  body {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  .min-h-screen {
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+  .h-screen {
+    height: 100vh;
+    height: 100dvh;
+  }
+}
+
+/* Remove iOS tap highlight */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Prevent iOS zoom on double tap */
+button, .btn {
+  touch-action: manipulation;
 }
 
 /* Custom Scrollbar for sleek dark look */

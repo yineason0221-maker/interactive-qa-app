@@ -182,14 +182,27 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
   };
 
   const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().then(() => {
+    const elem = document.documentElement;
+    const doc = document;
+    const isFullscreen = !!doc.fullscreenElement || !!doc['webkitFullscreenElement'];
+    if (!isFullscreen) {
+      if (elem.requestFullscreen) {
+        elem.requestFullscreen().then(() => {
+          setIsFullscreen(true);
+          onLogEvent('ENTER_FULLSCREEN', 'User enabled fullscreen');
+        }).catch(err => console.log('Fullscreen request denied:', err));
+      } else if (elem['webkitRequestFullscreen']) {
+        elem['webkitRequestFullscreen']();
         setIsFullscreen(true);
         onLogEvent('ENTER_FULLSCREEN', 'User enabled fullscreen');
-      }).catch(err => console.log('Fullscreen request denied:', err));
+      }
     } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
+      if (doc.exitFullscreen) {
+        doc.exitFullscreen();
+        setIsFullscreen(false);
+        onLogEvent('EXIT_FULLSCREEN', 'User exits fullscreen');
+      } else if (doc['webkitExitFullscreen']) {
+        doc['webkitExitFullscreen']();
         setIsFullscreen(false);
         onLogEvent('EXIT_FULLSCREEN', 'User exits fullscreen');
       }
@@ -197,9 +210,15 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
   };
 
   useEffect(() => {
-    const handleFSChange = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener('fullscreenchange', handleFSChange);
-    return () => document.removeEventListener('fullscreenchange', handleFSChange);
+    const doc = document;
+    const hasFullscreen = () => !!(doc.fullscreenElement || doc['webkitFullscreenElement']);
+    const handleFSChange = () => setIsFullscreen(hasFullscreen());
+    doc.addEventListener('fullscreenchange', handleFSChange);
+    doc.addEventListener('webkitfullscreenchange', handleFSChange);
+    return () => {
+      doc.removeEventListener('fullscreenchange', handleFSChange);
+      doc.removeEventListener('webkitfullscreenchange', handleFSChange);
+    };
   }, []);
 
   const handleStart = () => {
@@ -363,6 +382,7 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
         {currentStep.type === 'subtitle' && (
           <div
             onClick={goToNextStep}
+            onTouchEnd={(e) => { e.preventDefault(); goToNextStep(); }}
             className="cursor-pointer w-full"
             style={{ opacity: subtitleOpacity, transition: 'opacity 0.7s ease-in-out' }}
           >
@@ -548,13 +568,14 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
 
         {/* VIDEO STEP */}
         {currentStep.type === 'video' && (
-          <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
+          <div className="fixed inset-0 z-50 bg-black flex items-center justify-center" style={{ height: '100vh' }}>
             <video
               src={currentStep.content.videoUrl}
               autoPlay
               controls
-              className="w-full h-full object-contain"
+              playsInline
               onEnded={goToNextStep}
+              className="w-full h-full object-contain"
             />
           </div>
         )}
