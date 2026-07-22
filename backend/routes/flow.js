@@ -163,22 +163,31 @@ router.get('/export', verifyAdminToken, (req, res) => {
     zip.addFile('backup.json', Buffer.from(JSON.stringify(exportData, null, 2), 'utf8'));
 
     const uploadsDir = path.join(__dirname, '../../uploads');
+    console.log('[Export] Uploads dir:', uploadsDir, 'exists:', fs.existsSync(uploadsDir));
+    
+    let uploadedFileCount = 0;
     if (fs.existsSync(uploadsDir)) {
       const files = fs.readdirSync(uploadsDir);
+      console.log('[Export] Files in uploads:', files);
       files.forEach(file => {
         const filePath = path.join(uploadsDir, file);
         if (fs.statSync(filePath).isFile()) {
-          zip.addLocalFile(filePath, 'uploads');
+          const fileBuffer = fs.readFileSync(filePath);
+          zip.addFile('uploads/' + file, fileBuffer);
+          uploadedFileCount++;
         }
       });
     }
+    console.log('[Export] Added', uploadedFileCount, 'files to zip');
 
     const zipBuffer = zip.toBuffer();
+    console.log('[Export] Zip size:', zipBuffer.length, 'bytes, entries:', zip.getEntries().length);
+    
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename=qa-backup-${new Date().toISOString().slice(0, 10)}.zip`);
     res.send(zipBuffer);
   } catch (err) {
-    console.error('Error exporting data:', err);
+    console.error('[Export] Error exporting data:', err);
     return res.status(500).json({ error: '導出備份失敗' });
   }
 });
@@ -233,14 +242,15 @@ router.post('/import-zip', verifyAdminToken, zipUpload.single('backup'), (req, r
 
     importTransaction();
 
-    const uploadsDir = path.join(__dirname, '../../uploads');
+    const uploadsDir = path.join(__dirname, '../uploads');
     if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
     entries.forEach(entry => {
       if (entry.entryName.startsWith('uploads/') && !entry.isDirectory) {
-        const fileName = path.basename(entry.entryName);
+        const fileName = entry.entryName.replace('uploads/', '');
         const destPath = path.join(uploadsDir, fileName);
         fs.writeFileSync(destPath, entry.getData());
+        console.log('[Import] Restored file:', fileName, 'to', destPath);
       }
     });
 

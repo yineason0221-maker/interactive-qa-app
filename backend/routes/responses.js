@@ -11,7 +11,7 @@ router.post('/start', (req, res) => {
   }
 
   try {
-    const now = db.prepare("SELECT strftime('%Y-%m-%dT%H:%M:%S', 'now', 'localtime') as now").get().now;
+    const now = db.prepare("SELECT strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime') as now").get().now;
     const stmt = db.prepare(`
       INSERT INTO sessions (session_id, start_time, device_info)
       VALUES (?, ?, ?)
@@ -80,7 +80,7 @@ router.post('/finish', (req, res) => {
   try {
     const result = db.prepare(`
       UPDATE sessions
-      SET end_time = strftime('%Y-%m-%dT%H:%M:%S', 'now', 'localtime'),
+      SET end_time = strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime'),
           duration_seconds = CAST(ROUND((julianday('now', 'localtime') - julianday(start_time)) * 86400) AS INTEGER),
           nickname = COALESCE(?, nickname)
       WHERE session_id = ?
