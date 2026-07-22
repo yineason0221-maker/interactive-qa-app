@@ -1,0 +1,237 @@
+import React, { useState, useEffect } from 'react';
+import { KeyRound, Upload, Music, Film, Globe } from 'lucide-react';
+
+export default function AdminSettings({ token, settings, onSettingsUpdated }) {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [pwdMessage, setPwdMessage] = useState({ text: '', isError: false });
+
+  const [siteTitle, setSiteTitle] = useState(settings?.site_title || '神秘互動問答');
+  const [bgmUrl, setBgmUrl] = useState(settings?.bgm_url || '');
+  const [forceFullscreen, setForceFullscreen] = useState(settings?.force_fullscreen || 'true');
+
+  const [uploading, setUploading] = useState(false);
+  const [lastUploadedUrl, setLastUploadedUrl] = useState('');
+
+  useEffect(() => {
+    if (settings) {
+      setSiteTitle(settings.site_title || '神秘互動問答');
+      setBgmUrl(settings.bgm_url || '');
+      setForceFullscreen(settings.force_fullscreen || 'true');
+    }
+  }, [settings]);
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      setPwdMessage({ text: '新密碼與確認密碼不一致', isError: true });
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ currentPassword, newPassword })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPwdMessage({ text: '管理員密碼更新成功！請記住新密碼。', isError: false });
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      } else {
+        setPwdMessage({ text: data.error || '密碼更新失敗', isError: true });
+      }
+    } catch (err) {
+      setPwdMessage({ text: '連線錯誤', isError: true });
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    try {
+      const res = await fetch('/api/flow/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          site_title: siteTitle,
+          bgm_url: bgmUrl,
+          force_fullscreen: forceFullscreen
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('全域系統設定已成功儲存！');
+        if (onSettingsUpdated) onSettingsUpdated();
+      }
+    } catch (err) {
+      alert('儲存失敗');
+    }
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('mediaFile', file);
+
+    setUploading(true);
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData
+      });
+      const data = await res.json();
+      if (data.success) {
+        setLastUploadedUrl(data.fileUrl);
+        if (file.type.includes('audio')) {
+          setBgmUrl(data.fileUrl);
+        }
+        alert(`檔案上傳成功！網址：${data.fileUrl}`);
+      } else {
+        alert(data.error || '上傳失敗');
+      }
+    } catch (err) {
+      alert('上傳發生錯誤');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-8 text-zinc-100 max-w-4xl mx-auto">
+      {/* Site Global Settings */}
+      <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl space-y-6">
+        <h3 className="text-lg font-bold text-white flex items-center gap-2 border-b border-zinc-800 pb-3">
+          <Globe className="w-5 h-5 text-zinc-400" />
+          全域網站設定
+        </h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs font-mono text-zinc-400 block mb-1">網站封面標題</label>
+            <input
+              type="text"
+              value={siteTitle}
+              onChange={(e) => setSiteTitle(e.target.value)}
+              className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white focus:border-white focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-mono text-zinc-400 block mb-1">背景音樂網址 (BGM MP3)</label>
+            <input
+              type="text"
+              placeholder="e.g. /uploads/music.mp3 或外部 MP3 連結"
+              value={bgmUrl}
+              onChange={(e) => setBgmUrl(e.target.value)}
+              className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white focus:border-white focus:outline-none"
+            />
+          </div>
+        </div>
+
+        <div className="pt-2 flex items-center justify-between">
+          <button
+            onClick={handleSaveSettings}
+            className="px-6 py-2.5 bg-white text-black font-bold text-xs rounded-xl hover:bg-zinc-200 transition-colors shadow-lg"
+          >
+            儲存全域設定
+          </button>
+        </div>
+      </div>
+
+      {/* Media Upload Section */}
+      <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl space-y-4">
+        <h3 className="text-lg font-bold text-white flex items-center gap-2 border-b border-zinc-800 pb-3">
+          <Upload className="w-5 h-5 text-zinc-400" />
+          媒體檔案上傳 (MP3 背景音樂 / MP4 影片)
+        </h3>
+
+        <p className="text-xs text-zinc-400">
+          選擇你電腦中的 MP3 音訊或 MP4 影片上傳至後端伺服器，自動產生可於問題與背景播放的連結。
+        </p>
+
+        <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
+          <label className="cursor-pointer px-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl border border-zinc-700 font-mono text-xs flex items-center gap-2 transition-colors">
+            <Music className="w-4 h-4 text-zinc-400" />
+            <span>{uploading ? '檔案上傳中...' : '選擇 MP3 / MP4 檔案並上傳'}</span>
+            <input type="file" accept="audio/*,video/*" onChange={handleFileUpload} className="hidden" disabled={uploading} />
+          </label>
+
+          {lastUploadedUrl && (
+            <div className="text-xs font-mono text-zinc-400 bg-zinc-950 px-3 py-2 rounded-xl border border-zinc-800 truncate max-w-md">
+              最新網址: <span className="text-white select-all">{lastUploadedUrl}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Password Management */}
+      <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl space-y-4">
+        <h3 className="text-lg font-bold text-white flex items-center gap-2 border-b border-zinc-800 pb-3">
+          <KeyRound className="w-5 h-5 text-zinc-400" />
+          修改管理員登入密碼 (預設: admin)
+        </h3>
+
+        <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
+          {pwdMessage.text && (
+            <div className={`p-3 rounded-xl text-xs font-mono border ${
+              pwdMessage.isError ? 'bg-red-950/60 border-red-800 text-red-300' : 'bg-green-950/60 border-green-800 text-green-300'
+            }`}>
+              {pwdMessage.text}
+            </div>
+          )}
+
+          <div>
+            <label className="text-xs font-mono text-zinc-400 block mb-1">當前舊密碼</label>
+            <input
+              type="password"
+              required
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white focus:border-white focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-mono text-zinc-400 block mb-1">設定新密碼</label>
+            <input
+              type="password"
+              required
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white focus:border-white focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-mono text-zinc-400 block mb-1">再次確認新密碼</label>
+            <input
+              type="password"
+              required
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white focus:border-white focus:outline-none"
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs rounded-xl border border-zinc-700 transition-colors"
+          >
+            更新管理員密碼
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}

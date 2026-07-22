@@ -1,0 +1,358 @@
+import React, { useState, useEffect, useRef } from 'react';
+import EffectsCanvas from './EffectsCanvas';
+import { Maximize, ChevronRight, CheckCircle2, RotateCcw } from 'lucide-react';
+
+export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer, onFinishSession, onStartSession }) {
+  const [currentStepIndex, setCurrentStepIndex] = useState(-1); // -1 is Cover/Start screen
+  const [answers, setAnswers] = useState({});
+  const [currentInputValue, setCurrentInputValue] = useState('');
+  const [multiSelectValue, setMultiSelectValue] = useState([]);
+  const [nickname, setNickname] = useState('');
+  const [isStarted, setIsStarted] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [subtitleOpacity, setSubtitleOpacity] = useState(1);
+  const [completed, setCompleted] = useState(false);
+  const [startTime, setStartTime] = useState(null);
+
+  const stepTimerRef = useRef(null);
+
+  // Toggle Fullscreen mode
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().then(() => {
+        setIsFullscreen(true);
+        onLogEvent('ENTER_FULLSCREEN', 'User enabled fullscreen');
+      }).catch(err => {
+        console.log('Fullscreen request denied:', err);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+        setIsFullscreen(false);
+        onLogEvent('EXIT_FULLSCREEN', 'User exited fullscreen');
+      }
+    }
+  };
+
+  // Detect fullscreen change events
+  useEffect(() => {
+    const handleFSChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFSChange);
+    return () => document.removeEventListener('fullscreenchange', handleFSChange);
+  }, []);
+
+  // Handle start journey
+  const handleStart = () => {
+    if (settings.force_fullscreen === 'true') {
+      toggleFullscreen();
+    }
+    onStartSession();
+    setIsStarted(true);
+    setStartTime(Date.now());
+    setCurrentStepIndex(0);
+    onLogEvent('START_JOURNEY', 'User clicked start journey');
+  };
+
+  const currentStep = steps[currentStepIndex];
+
+  // Step transition logic
+  useEffect(() => {
+    if (!isStarted || !currentStep) return;
+
+    if (currentStep.type === 'subtitle') {
+      const content = currentStep.content || {};
+      const duration = (content.duration || 4) * 1000;
+      const fadeIn = (content.fadeIn || 1) * 1000;
+      const fadeOut = (content.fadeOut || 1) * 1000;
+
+      setSubtitleOpacity(0);
+      const fadeInTimer = setTimeout(() => {
+        setSubtitleOpacity(1);
+      }, 50);
+
+      const fadeOutTimer = setTimeout(() => {
+        setSubtitleOpacity(0);
+      }, duration - fadeOut);
+
+      stepTimerRef.current = setTimeout(() => {
+        goToNextStep();
+      }, duration);
+
+      return () => {
+        clearTimeout(fadeInTimer);
+        clearTimeout(fadeOutTimer);
+        clearTimeout(stepTimerRef.current);
+      };
+    }
+
+    if (currentStep.type === 'question') {
+      setCurrentInputValue(answers[currentStep.id] || '');
+      setMultiSelectValue(Array.isArray(answers[currentStep.id]) ? answers[currentStep.id] : []);
+    }
+  }, [currentStepIndex, isStarted]);
+
+  const goToNextStep = () => {
+    if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
+
+    onLogEvent('STEP_COMPLETED', `Completed step index ${currentStepIndex}: ${currentStep?.title}`);
+
+    if (currentStepIndex < steps.length - 1) {
+      setCurrentStepIndex(prev => prev + 1);
+    } else {
+      // Finished all steps
+      setCompleted(true);
+      const totalSeconds = Math.round((Date.now() - (startTime || Date.now())) / 1000);
+      onFinishSession(nickname || 'Anonymous', totalSeconds);
+      onLogEvent('FINISHED_JOURNEY', `Total time spent: ${totalSeconds}s`);
+    }
+  };
+
+  const handleQuestionSubmit = (overrideVal) => {
+    if (!currentStep) return;
+    const finalAns = overrideVal !== undefined ? overrideVal : (currentStep.content.questionType === 'multi_choice' ? multiSelectValue : currentInputValue);
+
+    // Save nickname if first question or text
+    if (currentStepIndex === 0 || currentStep.title.includes('暱稱') || currentStep.title.includes('名字')) {
+      if (typeof finalAns === 'string' && finalAns.trim()) {
+        setNickname(finalAns.trim());
+      }
+    }
+
+    setAnswers(prev => ({ ...prev, [currentStep.id]: finalAns }));
+    onRecordAnswer({
+      stepId: currentStep.id,
+      stepTitle: currentStep.title,
+      questionText: currentStep.content.questionText,
+      answerValue: Array.isArray(finalAns) ? finalAns.join(', ') : finalAns,
+      nickname
+    });
+
+    goToNextStep();
+  };
+
+  // Render Cover / Start Screen
+  if (!isStarted) {
+    return (
+      <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 text-center select-none">
+        <div className="max-w-2xl space-y-8 animate-fade-in">
+          <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-white glitch-text">
+            {settings.site_title || '神秘問答體驗'}
+          </h1>
+          <p className="text-zinc-400 text-lg md:text-xl font-light tracking-widest leading-relaxed">
+            一個屬於我們的沉浸式故事與問答旅程。<br />
+            請在安靜且不受打擾的環境下開始。
+          </p>
+
+          <div className="pt-6">
+            <button
+              onClick={handleStart}
+              className="inline-flex items-center gap-3 px-10 py-5 bg-white text-black font-bold text-xl rounded-full hover:bg-zinc-200 hover:scale-105 active:scale-95 transition-all shadow-2xl"
+            >
+              <span>點擊開始體驗</span>
+              <ChevronRight className="w-6 h-6" />
+            </button>
+          </div>
+
+          <div className="pt-8">
+            <button
+              onClick={toggleFullscreen}
+              className="inline-flex items-center gap-2 text-xs text-zinc-500 hover:text-zinc-300 transition-colors font-mono"
+            >
+              <Maximize className="w-4 h-4" />
+              <span>{isFullscreen ? '全螢幕已開啟' : '切換全螢幕 (推薦)'}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Render Completed / Ending Screen
+  if (completed) {
+    return (
+      <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 text-center select-none">
+        <div className="max-w-xl space-y-6">
+          <CheckCircle2 className="w-20 h-20 text-white mx-auto animate-bounce" />
+          <h2 className="text-4xl md:text-6xl font-bold tracking-tight">問答旅程已結束</h2>
+          <p className="text-zinc-400 text-lg md:text-xl leading-relaxed">
+            感謝你的認真作答與寶貴回應。<br />
+            所有的回答與想法都已經安全記錄。
+          </p>
+          <div className="pt-8">
+            <button
+              onClick={() => window.location.reload()}
+              className="inline-flex items-center gap-2 px-6 py-3 border border-zinc-700 text-zinc-300 hover:text-white hover:border-white rounded-full transition-all text-sm font-mono"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span>重新體驗</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Render Step Content
+  return (
+    <div className="min-h-screen bg-black text-white flex flex-col justify-between p-6 md:p-12 relative overflow-hidden select-none">
+      {/* Top Header Progress */}
+      <div className="flex justify-between items-center text-xs font-mono text-zinc-600 z-20">
+        <div>STEP {currentStepIndex + 1} / {steps.length}</div>
+        <div>{currentStep?.title || 'Interactive'}</div>
+      </div>
+
+      {/* Main Center Content */}
+      <div className="flex-1 flex flex-col items-center justify-center my-auto z-20 max-w-4xl mx-auto w-full text-center">
+        {/* SUBTITLE STEP */}
+        {currentStep.type === 'subtitle' && (
+          <div
+            onClick={goToNextStep}
+            className="cursor-pointer transition-opacity duration-700 w-full"
+            style={{ opacity: subtitleOpacity }}
+          >
+            <p className={`font-medium tracking-wide leading-relaxed text-white ${
+              currentStep.content.textSize === 'large' ? 'text-4xl md:text-6xl' : 'text-2xl md:text-4xl'
+            }`}>
+              {currentStep.content.text}
+            </p>
+            <div className="mt-12 text-xs text-zinc-600 font-mono tracking-widest animate-pulse">
+              [ 點擊任意處可跳過 ]
+            </div>
+          </div>
+        )}
+
+        {/* QUESTION STEP */}
+        {currentStep.type === 'question' && (
+          <div className="w-full space-y-8 animate-fade-in text-left md:text-center">
+            <h3 className="text-3xl md:text-5xl font-extrabold text-white leading-tight">
+              {currentStep.content.questionText}
+            </h3>
+
+            {/* Question Input Types */}
+            {currentStep.content.questionType === 'text' && (
+              <div className="space-y-4 max-w-2xl mx-auto">
+                <textarea
+                  rows={4}
+                  value={currentInputValue}
+                  onChange={(e) => setCurrentInputValue(e.target.value)}
+                  placeholder="輸入你的回答..."
+                  className="w-full bg-zinc-900 border border-zinc-700 text-white rounded-2xl p-5 text-xl focus:border-white focus:outline-none transition-all resize-none"
+                  autoFocus
+                />
+                <button
+                  onClick={() => handleQuestionSubmit()}
+                  disabled={currentStep.content.required && !currentInputValue.trim()}
+                  className="w-full py-4 bg-white text-black font-bold text-lg rounded-2xl hover:bg-zinc-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-lg"
+                >
+                  確認，下一題
+                </button>
+              </div>
+            )}
+
+            {currentStep.content.questionType === 'single_choice' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl mx-auto pt-4">
+                {(currentStep.content.options || []).map((opt, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleQuestionSubmit(opt)}
+                    className="p-6 text-left border border-zinc-800 bg-zinc-950/80 rounded-2xl hover:border-white hover:bg-zinc-900 transition-all text-xl font-medium text-white flex items-center justify-between group"
+                  >
+                    <span>{opt}</span>
+                    <ChevronRight className="w-5 h-5 text-zinc-600 group-hover:text-white transition-colors" />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {currentStep.content.questionType === 'multi_choice' && (
+              <div className="space-y-6 max-w-2xl mx-auto">
+                <div className="grid grid-cols-1 gap-3 text-left">
+                  {(currentStep.content.options || []).map((opt, idx) => {
+                    const isSelected = multiSelectValue.includes(opt);
+                    return (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          if (isSelected) {
+                            setMultiSelectValue(multiSelectValue.filter(v => v !== opt));
+                          } else {
+                            setMultiSelectValue([...multiSelectValue, opt]);
+                          }
+                        }}
+                        className={`p-5 rounded-2xl border transition-all text-lg font-medium flex items-center justify-between ${
+                          isSelected ? 'border-white bg-zinc-800 text-white' : 'border-zinc-800 bg-zinc-950 text-zinc-400'
+                        }`}
+                      >
+                        <span>{opt}</span>
+                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${isSelected ? 'border-white bg-white text-black' : 'border-zinc-600'}`}>
+                          {isSelected && '✓'}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button
+                  onClick={() => handleQuestionSubmit()}
+                  disabled={currentStep.content.required && multiSelectValue.length === 0}
+                  className="w-full py-4 bg-white text-black font-bold text-lg rounded-2xl hover:bg-zinc-200 transition-all disabled:opacity-40"
+                >
+                  確認提交選擇
+                </button>
+              </div>
+            )}
+
+            {currentStep.content.questionType === 'rating' && (
+              <div className="space-y-8 max-w-2xl mx-auto">
+                <div className="flex justify-center gap-2 md:gap-4 flex-wrap">
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
+                    <button
+                      key={num}
+                      onClick={() => handleQuestionSubmit(num)}
+                      className="w-12 h-12 md:w-16 md:h-16 rounded-2xl border border-zinc-700 bg-zinc-900 text-xl font-bold hover:border-white hover:bg-white hover:text-black transition-all"
+                    >
+                      {num}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-zinc-500 font-mono">1 = 非常低 / 10 = 極高</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* EFFECT STEP */}
+        {currentStep.type === 'effect' && (
+          <EffectsCanvas
+            effectType={currentStep.content.effectType}
+            duration={currentStep.content.duration || 3}
+            onComplete={goToNextStep}
+          />
+        )}
+
+        {/* VIDEO STEP */}
+        {currentStep.type === 'video' && (
+          <div className="w-full max-w-4xl mx-auto aspect-video rounded-2xl overflow-hidden border border-zinc-800 bg-black shadow-2xl relative">
+            <video
+              src={currentStep.content.videoUrl}
+              autoPlay
+              controls
+              onEnded={goToNextStep}
+              className="w-full h-full object-contain"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Bottom Footer Progress Bar */}
+      <div className="w-full bg-zinc-900 h-1 rounded-full overflow-hidden z-20">
+        <div
+          className="bg-white h-full transition-all duration-300"
+          style={{ width: `${((currentStepIndex + 1) / steps.length) * 100}%` }}
+        />
+      </div>
+    </div>
+  );
+}
