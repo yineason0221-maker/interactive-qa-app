@@ -8,6 +8,7 @@
     "dev": "nodemon server.js"
   },
   "dependencies": {
+    "adm-zip": "^0.5.10",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^11.8.0",
     "cors": "^2.8.5",

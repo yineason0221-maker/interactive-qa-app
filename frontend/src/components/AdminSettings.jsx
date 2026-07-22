@@ -327,10 +327,12 @@ function ExportButton({ token, onImported }) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `qa-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `qa-backup-${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      alert('設定備份已下載！');
+      alert('備份 zip 已下載！包含 steps、settings 和上傳的音訊/影片檔案。');
     } catch {
       alert('匯出失敗');
     }
@@ -338,7 +340,7 @@ function ExportButton({ token, onImported }) {
 
   return (
     <button onClick={handleExport} className="px-4 py-2 bg-blue-900/60 hover:bg-blue-800 text-blue-200 border border-blue-700/60 text-xs font-mono rounded-xl flex items-center gap-2 transition-colors">
-      <Upload className="w-3.5 h-3.5" /> 匯出備份 (JSON)
+      <Upload className="w-3.5 h-3.5" /> 匯出完整備份 (ZIP)
     </button>
   );
 }
@@ -348,18 +350,13 @@ function ImportButton({ token, onImported }) {
     const file = e.target.files[0];
     if (!file) return;
     try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-      if (!data.steps || !data.settings) {
-        alert('無效的備份檔案格式');
-        return;
-      }
-      if (!confirm(`確定要匯入備份嗎？這將覆蓋現有流程與設定。\n備份時間：${data.exportedAt || '未知'}\n步驟數量：${data.steps?.length || 0}`)) return;
+      const formData = new FormData();
+      formData.append('backup', file);
 
-      const res = await fetch('/api/flow/import', {
+      const res = await fetch('/api/flow/import-zip', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ data })
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData
       });
       const result = await res.json();
       if (result.success) {
@@ -376,8 +373,8 @@ function ImportButton({ token, onImported }) {
 
   return (
     <label className="px-4 py-2 bg-green-900/60 hover:bg-green-800 text-green-200 border border-green-700/60 text-xs font-mono rounded-xl flex items-center gap-2 transition-colors cursor-pointer">
-      <Upload className="w-3.5 h-3.5" /> 還原備份 (JSON)
-      <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+      <Upload className="w-3.5 h-3.5" /> 還原備份 (ZIP)
+      <input type="file" accept=".zip" onChange={handleImport} className="hidden" />
     </label>
   );
 }

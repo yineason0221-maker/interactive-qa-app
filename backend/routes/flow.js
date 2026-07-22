@@ -2,6 +2,9 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { verifyAdminToken } = require('../middleware/auth');
+const multer = require('multer');
+const zipStorage = multer.memoryStorage();
+const zipUpload = multer({ storage: zipStorage, limits: { fileSize: 200 * 1024 * 1024 } });
 
 // GET /api/flow/steps - Public (for players and editor preview)
 router.get('/steps', (req, res) => {
@@ -130,9 +133,13 @@ router.delete('/steps/:id', verifyAdminToken, (req, res) => {
   }
 });
 
-// GET /api/flow/export - Admin Only (export all steps + settings as JSON)
+// GET /api/flow/export - Admin Only (export all steps + settings + uploads as ZIP)
 router.get('/export', verifyAdminToken, (req, res) => {
   try {
+    const path = require('path');
+    const fs = require('fs');
+    const AdmZip = require('adm-zip');
+
     const steps = db.prepare('SELECT * FROM steps ORDER BY order_index ASC').all().map(row => ({
       id: row.id,
       order_index: row.order_index,
@@ -152,12 +159,93 @@ router.get('/export', verifyAdminToken, (req, res) => {
       settings
     };
 
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', `attachment; filename=qa-backup-${Date.now()}.json`);
-    res.json(exportData);
+    const zip = new AdmZip();
+    zip.addFile('backup.json', Buffer.from(JSON.stringify(exportData, null, 2), 'utf8'));
+
+    const uploadsDir = path.join(__dirname, '../../uploads');
+    if (fs.existsSync(uploadsDir)) {
+      const files = fs.readdirSync(uploadsDir);
+      files.forEach(file => {
+        const filePath = path.join(uploadsDir, file);
+        if (fs.statSync(filePath).isFile()) {
+          zip.addLocalFile(filePath, 'uploads');
+        }
+      });
+    }
+
+    const zipBuffer = zip.toBuffer();
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename=qa-backup-${new Date().toISOString().slice(0, 10)}.zip`);
+    res.send(zipBuffer);
   } catch (err) {
     console.error('Error exporting data:', err);
     return res.status(500).json({ error: '導出備份失敗' });
+  }
+});
+
+// POST /api/flow/import-zip - Admin Only (import zip backup with uploads)
+router.post('/import-zip', verifyAdminToken, zipUpload.single('backup'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: '請上傳備份 zip 檔案' });
+  }
+
+  const backupFile = req.file;
+  const path = require('path');
+  const fs = require('fs');
+  const AdmZip = require('adm-zip');
+
+  try {
+    const zip = new AdmZip(backupFile.data);
+    const entries = zip.getEntries();
+
+    const backupJsonEntry = entries.find(e => e.entryName === 'backup.json');
+    if (!backupJsonEntry) {
+      return res.status(400).json({ error: '備份檔案中缺少 backup.json' });
+    }
+
+    const backupData = JSON.parse(backupJsonEntry.getData().toString('utf8'));
+    if (!backupData.steps || !Array.isArray(backupData.steps)) {
+      return res.status(400).json({ error: '無效的備份資料格式' });
+    }
+
+    const importTransaction = db.transaction(() => {
+      if (backupData.settings && typeof backupData.settings === 'object') {
+        const upsert = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');
+        Object.entries(backupData.settings).forEach(([key, value]) => {
+          upsert.run(key, String(value));
+        });
+      }
+
+      db.prepare('DELETE FROM steps').run();
+      const insertStmt = db.prepare('INSERT INTO steps (id, order_index, type, title, content_json) VALUES (?, ?, ?, ?, ?)');
+      (backupData.steps || []).forEach((step, idx) => {
+        insertStmt.run(
+          step.id || null,
+          idx,
+          step.type || 'subtitle',
+          step.title || '未命名步驟',
+          JSON.stringify(step.content || {})
+        );
+      });
+    });
+
+    importTransaction();
+
+    const uploadsDir = path.join(__dirname, '../../uploads');
+    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+    entries.forEach(entry => {
+      if (entry.entryName.startsWith('uploads/') && !entry.isDirectory) {
+        const fileName = path.basename(entry.entryName);
+        const destPath = path.join(uploadsDir, fileName);
+        fs.writeFileSync(destPath, entry.getData());
+      }
+    });
+
+    return res.json({ success: true, message: `已匯入 ${backupData.steps.length} 個步驟、設定與上傳檔案` });
+  } catch (err) {
+    console.error('Error importing zip backup:', err);
+    return res.status(500).json({ error: '匯入備份失敗: ' + err.message });
   }
 });
 
