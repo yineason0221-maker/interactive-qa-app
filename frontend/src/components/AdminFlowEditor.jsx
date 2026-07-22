@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, ArrowUp, ArrowDown, Save, Film, Sparkles, MessageSquare, Type } from 'lucide-react';
+import { Plus, Trash2, ArrowUp, ArrowDown, Save, Film, Sparkles, MessageSquare, Type, Music, Volume2 } from 'lucide-react';
 
 export default function AdminFlowEditor({ token, steps: initialSteps, onSaveSuccess }) {
   const [steps, setSteps] = useState([]);
   const [activeStepIndex, setActiveStepIndex] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState('content');
+  const [optionSoundUrl, setOptionSoundUrl] = useState('');
+  const [bgmUrl, setBgmUrl] = useState('');
 
   useEffect(() => {
     if (initialSteps && initialSteps.length > 0) {
@@ -126,7 +129,63 @@ export default function AdminFlowEditor({ token, steps: initialSteps, onSaveSucc
     setSteps(updated);
   };
 
+  const handleFileUpload = async (e, type) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('mediaFile', file);
+
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (type === 'bgm') {
+          setBgmUrl(data.fileUrl);
+          updateActiveContent({ bgm_url: data.fileUrl });
+        }
+      }
+    } catch (err) {
+      // silently fail
+    }
+  };
+
+  const handleSoundUpload = async (e, optLabel, currentOptionMeta) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('mediaFile', file);
+
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData
+      });
+      const data = await res.json();
+      if (data.success && data.fileUrl) {
+        const newMeta = { ...currentOptionMeta, [optLabel]: { ...(currentOptionMeta[optLabel] || { behavior: 'normal', clicksNeeded: 1 }), soundEffect: data.fileUrl } };
+        updateActiveContent({ optionMeta: newMeta });
+      }
+    } catch (err) {
+      // silently fail
+    }
+  };
+
   const activeStep = steps[activeStepIndex];
+
+  useEffect(() => {
+    if (activeStep) {
+      setBgmUrl(activeStep.content?.bgm_url || '');
+      setOptionSoundUrl('');
+      setActiveTab('content');
+    }
+  }, [activeStepIndex]);
+
+  const handleFileUpload = async (e, type) => {
 
   return (
     <div className="space-y-6 text-zinc-100">
@@ -309,6 +368,26 @@ export default function AdminFlowEditor({ token, steps: initialSteps, onSaveSucc
                       <option value="medium">中等 (Medium)</option>
                     </select>
                   </div>
+
+                  <div>
+                    <label className="text-xs font-mono text-zinc-400 block mb-1">此關卡專屬背景音樂 BGM (可選)</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="e.g. /uploads/step-music.mp3"
+                        value={bgmUrl}
+                        onChange={(e) => { setBgmUrl(e.target.value); updateActiveContent({ bgm_url: e.target.value }); }}
+                        className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white"
+                      />
+                      <label className="cursor-pointer px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs rounded-xl border border-zinc-700 whitespace-nowrap">
+                        <Music className="w-3.5 h-3.5 inline mr-1" />上傳
+                        <input type="file" accept="audio/*" onChange={(e) => handleFileUpload(e, 'bgm')} className="hidden" />
+                      </label>
+                    </div>
+                    <p className="text-[10px] text-zinc-500 mt-1 font-mono">
+                      如有設定，到達此關前會自動播放此音樂 (覆蓋全域設定)
+                    </p>
+                  </div>
                 </div>
               )}
 
@@ -336,10 +415,28 @@ export default function AdminFlowEditor({ token, steps: initialSteps, onSaveSucc
                       <option value="single_choice">單選題 (Single Choice)</option>
                       <option value="multi_choice">多選題 (Multi Choice)</option>
                       <option value="rating">1-10分 評分題 (Rating Scale)</option>
-                    </select>
-                  </div>
+                  </select>
+                </div>
 
-                  {(activeStep.content.questionType === 'single_choice' || activeStep.content.questionType === 'multi_choice') && (
+                {/* Per-Step BGM */}
+                <div>
+                  <label className="text-xs font-mono text-zinc-400 block mb-1">此關卡專屬 BGM (可選，覆蓋全域設定)</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="e.g. /uploads/step-music.mp3"
+                      value={bgmUrl}
+                      onChange={(e) => { setBgmUrl(e.target.value); updateActiveContent({ bgm_url: e.target.value }); }}
+                      className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white"
+                    />
+                    <label className="cursor-pointer px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs rounded-xl border border-zinc-700 whitespace-nowrap">
+                      <Music className="w-3.5 h-3.5 inline mr-1" />上傳
+                      <input type="file" accept="audio/*" onChange={(e) => handleFileUpload(e, 'bgm')} className="hidden" />
+                    </label>
+                  </div>
+                </div>
+
+                {(activeStep.content.questionType === 'single_choice' || activeStep.content.questionType === 'multi_choice') && (
                     <div className="space-y-2">
                       <label className="text-xs font-mono text-zinc-400 block">選項列表</label>
                       {(activeStep.content.options || []).map((opt, oIdx) => (
@@ -375,6 +472,94 @@ export default function AdminFlowEditor({ token, steps: initialSteps, onSaveSucc
                         <Plus className="w-3.5 h-3.5" /> 新增選項
                       </button>
                     </div>
+
+                    {/* Option Advanced Settings */}
+                    {(activeStep.content.questionType === 'single_choice') && (
+                      <div className="mt-4 pt-4 border-t border-zinc-800 space-y-3">
+                        <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1">
+                          <Volume2 className="w-3.5 h-3.5" />
+                          選項進階設定 (音效 / 亂跑 / 點擊次數 / 分支路由)
+                        </h4>
+
+                        {(() => {
+                          const currentOptionMeta = activeStep.content.optionMeta || {};
+                          const stepIds = steps.map(s => ({ id: s.id, title: s.title }));
+                          return (activeStep.content.options || []).map((opt, oIdx) => {
+                            const meta = currentOptionMeta[opt] || { behavior: 'normal', clicksNeeded: 1, nextStepId: null, soundEffect: '' };
+                            return (
+                              <div key={`meta-${oIdx}`} className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 space-y-2">
+                                <div className="text-xs font-mono text-white font-bold truncate">{opt}</div>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                  <div>
+                                    <label className="text-[10px] text-zinc-500 block mb-0.5">行為</label>
+                                    <select
+                                      value={meta.behavior || 'normal'}
+                                      onChange={(e) => {
+                                        const newMeta = { ...currentOptionMeta, [opt]: { ...meta, behavior: e.target.value } };
+                                        updateActiveContent({ optionMeta: newMeta });
+                                      }}
+                                      className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-white"
+                                    >
+                                      <option value="normal">一般 (Normal)</option>
+                                      <option value="escape">亂跑 (Escape)</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="text-[10px] text-zinc-500 block mb-0.5">點擊次數門檻</label>
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      max={20}
+                                      value={meta.clicksNeeded || 1}
+                                      onChange={(e) => {
+                                        const newMeta = { ...currentOptionMeta, [opt]: { ...meta, clicksNeeded: parseInt(e.target.value) || 1 } };
+                                        updateActiveContent({ optionMeta: newMeta });
+                                      }}
+                                      className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-white"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-[10px] text-zinc-500 block mb-0.5">分支到關卡 ID</label>
+                                    <select
+                                      value={meta.nextStepId || ''}
+                                      onChange={(e) => {
+                                        const newMeta = { ...currentOptionMeta, [opt]: { ...meta, nextStepId: e.target.value ? parseInt(e.target.value) : null } };
+                                        updateActiveContent({ optionMeta: newMeta });
+                                      }}
+                                      className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-white"
+                                    >
+                                      <option value="">→ 下一關 (預設)</option>
+                                      {stepIds.map(s => (
+                                        <option key={s.id} value={s.id}>→ {s.title} (ID: {s.id})</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="text-[10px] text-zinc-500 block mb-0.5">點擊音效 URL</label>
+                                    <div className="flex gap-1">
+                                      <input
+                                        type="text"
+                                        placeholder="/uploads/click.mp3"
+                                        value={meta.soundEffect || ''}
+                                        onChange={(e) => {
+                                          const newMeta = { ...currentOptionMeta, [opt]: { ...meta, soundEffect: e.target.value } };
+                                          updateActiveContent({ optionMeta: newMeta });
+                                        }}
+                                        className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-[10px] text-white min-w-0"
+                                      />
+                                      <label className="cursor-pointer px-1.5 bg-zinc-800 hover:bg-zinc-700 rounded text-white whitespace-nowrap">
+                                        <Volume2 className="w-3 h-3" />
+                                        <input type="file" accept="audio/*" onChange={(ev) => handleSoundUpload(ev, opt, currentOptionMeta)} className="hidden" />
+                                      </label>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                    )}
                   )}
                 </div>
               )}

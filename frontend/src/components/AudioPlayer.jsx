@@ -4,21 +4,39 @@ import { Volume2, VolumeX, Music } from 'lucide-react';
 export default function AudioPlayer({ src }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [hasSrc, setHasSrc] = useState(!!src);
   const audioRef = useRef(null);
 
-  useEffect(() => {
-    if (audioRef.current && src) {
-      audioRef.current.volume = 0.4;
-      const playPromise = audioRef.current.play();
-      if (playPromise !== undefined) {
-        playPromise
-          .then(() => setIsPlaying(true))
-          .catch(err => {
-            console.log('Autoplay blocked by browser policy:', err);
-            setIsPlaying(false);
-          });
-      }
+  const attemptPlay = async () => {
+    if (!audioRef.current || !src) return;
+    try {
+      audioRef.current.load();
+      await audioRef.current.play();
+      setIsPlaying(true);
+    } catch {
+      setIsPlaying(false);
     }
+  };
+
+  useEffect(() => {
+    setHasSrc(!!src);
+    attemptPlay();
+
+    const onInteraction = () => {
+      attemptPlay();
+      document.removeEventListener('click', onInteraction);
+      document.removeEventListener('touchstart', onInteraction);
+      document.removeEventListener('keydown', onInteraction);
+    };
+    document.addEventListener('click', onInteraction);
+    document.addEventListener('touchstart', onInteraction);
+    document.addEventListener('keydown', onInteraction);
+
+    return () => {
+      document.removeEventListener('click', onInteraction);
+      document.removeEventListener('touchstart', onInteraction);
+      document.removeEventListener('keydown', onInteraction);
+    };
   }, [src]);
 
   const togglePlay = () => {
@@ -27,8 +45,7 @@ export default function AudioPlayer({ src }) {
       audioRef.current.pause();
       setIsPlaying(false);
     } else {
-      audioRef.current.play();
-      setIsPlaying(true);
+      audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
     }
   };
 
@@ -38,11 +55,11 @@ export default function AudioPlayer({ src }) {
     setIsMuted(!isMuted);
   };
 
-  if (!src) return null;
+  if (!hasSrc) return null;
 
   return (
     <div className="fixed top-6 right-6 z-50 flex items-center gap-3 bg-zinc-900/80 border border-zinc-700/60 px-4 py-2 rounded-full backdrop-blur-md shadow-2xl transition-all hover:scale-105">
-      <audio ref={audioRef} src={src} loop />
+      <audio ref={audioRef} src={src} loop preload="auto" />
       <div className="flex items-center gap-2">
         <Music className={`w-4 h-4 ${isPlaying ? 'text-white animate-pulse' : 'text-zinc-500'}`} />
         <span className="text-xs text-zinc-300 font-mono tracking-wider">

@@ -128,6 +128,35 @@ router.get('/analytics', verifyAdminToken, (req, res) => {
   }
 });
 
+// GET /api/responses/incomplete - Admin Only (sessions still in progress)
+router.get('/incomplete', verifyAdminToken, (req, res) => {
+  try {
+    const incomplete = db.prepare(`
+      SELECT s.*,
+        ROUND((julianday('now') - julianday(s.start_time)) * 86400) as dwell_seconds
+      FROM sessions s
+      WHERE s.end_time IS NULL OR s.end_time = ''
+      ORDER BY s.start_time DESC
+    `).all();
+
+    const enriched = incomplete.map(s => {
+      const answerCount = db.prepare('SELECT COUNT(*) as cnt FROM answers WHERE session_id = ?').get(s.session_id).cnt;
+      const lastAnswer = db.prepare('SELECT * FROM answers WHERE session_id = ? ORDER BY created_at DESC LIMIT 1').get(s.session_id);
+      return {
+        ...s,
+        answerCount,
+        lastStepTitle: lastAnswer ? lastAnswer.step_title : null,
+        lastAnswerTime: lastAnswer ? lastAnswer.created_at : null
+      };
+    });
+
+    return res.json({ success: true, sessions: enriched });
+  } catch (err) {
+    console.error('Error fetching incomplete sessions:', err);
+    return res.status(500).json({ error: '查詢未完成紀錄失敗' });
+  }
+});
+
 // DELETE /api/responses/clear-all - Admin Only
 router.delete('/clear-all', verifyAdminToken, (req, res) => {
   try {

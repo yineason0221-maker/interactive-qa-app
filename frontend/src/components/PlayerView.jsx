@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import EffectsCanvas from './EffectsCanvas';
+import AudioPlayer from './AudioPlayer';
 import { Maximize, ChevronRight, CheckCircle2, RotateCcw } from 'lucide-react';
 
 export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer, onFinishSession, onStartSession }) {
-  const [currentStepIndex, setCurrentStepIndex] = useState(-1); // -1 is Cover/Start screen
+  const [currentStepIndex, setCurrentStepIndex] = useState(-1);
   const [answers, setAnswers] = useState({});
   const [currentInputValue, setCurrentInputValue] = useState('');
   const [multiSelectValue, setMultiSelectValue] = useState([]);
@@ -14,94 +15,80 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
   const [completed, setCompleted] = useState(false);
   const [startTime, setStartTime] = useState(null);
 
-  const stepTimerRef = useRef(null);
+  const [escapeClicks, setEscapeClicks] = useState({});
+  const optionContainerRef = useRef(null);
 
-  // Toggle Fullscreen mode
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().then(() => {
-        setIsFullscreen(true);
-        onLogEvent('ENTER_FULLSCREEN', 'User enabled fullscreen');
-      }).catch(err => {
-        console.log('Fullscreen request denied:', err);
-      });
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-        setIsFullscreen(false);
-        onLogEvent('EXIT_FULLSCREEN', 'User exited fullscreen');
+  const stepTimerRef = useRef(null);
+  const currentStep = steps[currentStepIndex];
+  const effectiveBgmUrl = currentStep?.content?.bgm_url || settings.bgm_url || '';
+
+  const isNicknameQuestion = (step) => {
+    return currentStepIndex === 0 || step.title.includes('暱稱') || step.title.includes('名字');
+  };
+
+  const playOptionSound = (url) => {
+    if (!url) return;
+    try {
+      const audio = new Audio(url);
+      audio.volume = 0.6;
+      audio.play().catch(() => {});
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleEscapeOptionClick = (opt, meta) => {
+    const clicksNeeded = meta.clicksNeeded || 3;
+    if (meta.soundEffect) playOptionSound(meta.soundEffect);
+
+    setEscapeClicks(prev => {
+      const newCount = (prev[opt] || 0) + 1;
+      if (newCount < clicksNeeded) {
+        onLogEvent('ESCAPE_CLICK', `Clicked "${opt}" (${newCount}/${clicksNeeded})`);
+      } else {
+        onLogEvent('ESCAPE_CAPTURED', `Captured "${opt}" after ${clicksNeeded} clicks`);
+        handleOptionSelected(opt, meta);
+      }
+      return { ...prev, [opt]: newCount };
+    });
+  };
+
+  const handleOptionSelected = (opt, meta) => {
+    if (!currentStep) return;
+
+    let targetIndex = currentStepIndex + 1;
+
+    if (meta?.nextStepId) {
+      const foundIndex = steps.findIndex(s => s.id === meta.nextStepId);
+      if (foundIndex >= 0) targetIndex = foundIndex;
+    }
+
+    const branches = currentStep.content.branches || {};
+    if (branches[opt] !== undefined && !meta?.nextStepId) {
+      const foundIndex = steps.findIndex(s => s.id === branches[opt]);
+      if (foundIndex >= 0) targetIndex = foundIndex;
+    }
+
+    if (isNicknameQuestion(currentStep)) {
+      if (typeof opt === 'string' && opt.trim()) {
+        setNickname(opt.trim());
       }
     }
-  };
 
-  // Detect fullscreen change events
-  useEffect(() => {
-    const handleFSChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener('fullscreenchange', handleFSChange);
-    return () => document.removeEventListener('fullscreenchange', handleFSChange);
-  }, []);
+    if (meta?.soundEffect) playOptionSound(meta.soundEffect);
 
-  // Handle start journey
-  const handleStart = () => {
-    if (settings.force_fullscreen === 'true') {
-      toggleFullscreen();
-    }
-    onStartSession();
-    setIsStarted(true);
-    setStartTime(Date.now());
-    setCurrentStepIndex(0);
-    onLogEvent('START_JOURNEY', 'User clicked start journey');
-  };
+    setAnswers(prev => ({ ...prev, [currentStep.id]: opt }));
+    onRecordAnswer({
+      stepId: currentStep.id,
+      stepTitle: currentStep.title,
+      questionText: currentStep.content.questionText,
+      answerValue: opt,
+      nickname
+    });
 
-  const currentStep = steps[currentStepIndex];
-
-  // Step transition logic
-  useEffect(() => {
-    if (!isStarted || !currentStep) return;
-
-    if (currentStep.type === 'subtitle') {
-      const content = currentStep.content || {};
-      const duration = (content.duration || 4) * 1000;
-      const fadeIn = (content.fadeIn || 1) * 1000;
-      const fadeOut = (content.fadeOut || 1) * 1000;
-
-      setSubtitleOpacity(0);
-      const fadeInTimer = setTimeout(() => {
-        setSubtitleOpacity(1);
-      }, 50);
-
-      const fadeOutTimer = setTimeout(() => {
-        setSubtitleOpacity(0);
-      }, duration - fadeOut);
-
-      stepTimerRef.current = setTimeout(() => {
-        goToNextStep();
-      }, duration);
-
-      return () => {
-        clearTimeout(fadeInTimer);
-        clearTimeout(fadeOutTimer);
-        clearTimeout(stepTimerRef.current);
-      };
-    }
-
-    if (currentStep.type === 'question') {
-      setCurrentInputValue(answers[currentStep.id] || '');
-      setMultiSelectValue(Array.isArray(answers[currentStep.id]) ? answers[currentStep.id] : []);
-    }
-  }, [currentStepIndex, isStarted]);
-
-  const goToNextStep = () => {
-    if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
-
-    onLogEvent('STEP_COMPLETED', `Completed step index ${currentStepIndex}: ${currentStep?.title}`);
-
-    if (currentStepIndex < steps.length - 1) {
-      setCurrentStepIndex(prev => prev + 1);
+    if (targetIndex < steps.length) {
+      setCurrentStepIndex(targetIndex);
     } else {
-      // Finished all steps
       setCompleted(true);
       const totalSeconds = Math.round((Date.now() - (startTime || Date.now())) / 1000);
       onFinishSession(nickname || 'Anonymous', totalSeconds);
@@ -113,8 +100,7 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
     if (!currentStep) return;
     const finalAns = overrideVal !== undefined ? overrideVal : (currentStep.content.questionType === 'multi_choice' ? multiSelectValue : currentInputValue);
 
-    // Save nickname if first question or text
-    if (currentStepIndex === 0 || currentStep.title.includes('暱稱') || currentStep.title.includes('名字')) {
+    if (isNicknameQuestion(currentStep)) {
       if (typeof finalAns === 'string' && finalAns.trim()) {
         setNickname(finalAns.trim());
       }
@@ -129,8 +115,91 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
       nickname
     });
 
-    goToNextStep();
+    if (currentStepIndex < steps.length - 1) {
+      setCurrentStepIndex(prev => prev + 1);
+    } else {
+      setCompleted(true);
+      const totalSeconds = Math.round((Date.now() - (startTime || Date.now())) / 1000);
+      onFinishSession(nickname || 'Anonymous', totalSeconds);
+      onLogEvent('FINISHED_JOURNEY', `Total time spent: ${totalSeconds}s`);
+    }
   };
+
+  const goToNextStep = () => {
+    if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
+    onLogEvent('STEP_COMPLETED', `Completed step index ${currentStepIndex}: ${currentStep?.title}`);
+
+    if (currentStepIndex < steps.length - 1) {
+      setCurrentStepIndex(prev => prev + 1);
+    } else {
+      setCompleted(true);
+      const totalSeconds = Math.round((Date.now() - (startTime || Date.now())) / 1000);
+      onFinishSession(nickname || 'Anonymous', totalSeconds);
+      onLogEvent('FINISHED_JOURNEY', `Total time spent: ${totalSeconds}s`);
+    }
+  };
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().then(() => {
+        setIsFullscreen(true);
+        onLogEvent('ENTER_FULLSCREEN', 'User enabled fullscreen');
+      }).catch(err => console.log('Fullscreen request denied:', err));
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+        setIsFullscreen(false);
+        onLogEvent('EXIT_FULLSCREEN', 'User exited fullscreen');
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleFSChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handleFSChange);
+    return () => document.removeEventListener('fullscreenchange', handleFSChange);
+  }, []);
+
+  const handleStart = () => {
+    if (settings.force_fullscreen === 'true') toggleFullscreen();
+    onStartSession();
+    setIsStarted(true);
+    setStartTime(Date.now());
+    setCurrentStepIndex(0);
+    onLogEvent('START_JOURNEY', 'User clicked start journey');
+  };
+
+  useEffect(() => {
+    if (!isStarted || !currentStep) return;
+    setEscapeClicks({});
+  }, [currentStepIndex, isStarted]);
+
+  useEffect(() => {
+    if (!isStarted || !currentStep) return;
+
+    if (currentStep.type === 'subtitle') {
+      const content = currentStep.content || {};
+      const duration = (content.duration || 4) * 1000;
+      const fadeIn = (content.fadeIn || 1) * 1000;
+      const fadeOut = (content.fadeOut || 1) * 1000;
+
+      setSubtitleOpacity(0);
+      const fadeInTimer = setTimeout(() => setSubtitleOpacity(1), 50);
+      const fadeOutTimer = setTimeout(() => setSubtitleOpacity(0), duration - fadeOut);
+      stepTimerRef.current = setTimeout(goToNextStep, duration);
+
+      return () => {
+        clearTimeout(fadeInTimer);
+        clearTimeout(fadeOutTimer);
+        clearTimeout(stepTimerRef.current);
+      };
+    }
+
+    if (currentStep.type === 'question') {
+      setCurrentInputValue(answers[currentStep.id] || '');
+      setMultiSelectValue(Array.isArray(answers[currentStep.id]) ? answers[currentStep.id] : []);
+    }
+  }, [currentStepIndex, isStarted]);
 
   // Render Cover / Start Screen
   if (!isStarted) {
@@ -165,6 +234,8 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
             </button>
           </div>
         </div>
+
+        {effectiveBgmUrl && <AudioPlayer src={effectiveBgmUrl} />}
       </div>
     );
   }
@@ -190,11 +261,22 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
             </button>
           </div>
         </div>
+        {effectiveBgmUrl && <AudioPlayer src={effectiveBgmUrl} />}
       </div>
     );
   }
 
-  // Render Step Content
+  const options = currentStep?.content?.options || [];
+  const optionMeta = currentStep?.content?.optionMeta || {};
+
+  const isNormalOption = (opt) => {
+    const meta = optionMeta[opt] || {};
+    const clicksNeeded = meta.clicksNeeded || 1;
+    const isEscape = meta.behavior === 'escape';
+    const captured = isEscape && (escapeClicks[opt] || 0) >= clicksNeeded;
+    return !isEscape || captured;
+  };
+
   return (
     <div className="min-h-screen bg-black text-white flex flex-col justify-between p-6 md:p-12 relative overflow-hidden select-none">
       {/* Top Header Progress */}
@@ -230,7 +312,6 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
               {currentStep.content.questionText}
             </h3>
 
-            {/* Question Input Types */}
             {currentStep.content.questionType === 'text' && (
               <div className="space-y-4 max-w-2xl mx-auto">
                 <textarea
@@ -251,30 +332,85 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
               </div>
             )}
 
-            {currentStep.content.questionType === 'single_choice' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl mx-auto pt-4">
-                {(currentStep.content.options || []).map((opt, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleQuestionSubmit(opt)}
-                    className="p-6 text-left border border-zinc-800 bg-zinc-950/80 rounded-2xl hover:border-white hover:bg-zinc-900 transition-all text-xl font-medium text-white flex items-center justify-between group"
-                  >
-                    <span>{opt}</span>
-                    <ChevronRight className="w-5 h-5 text-zinc-600 group-hover:text-white transition-colors" />
-                  </button>
-                ))}
+            {currentStep.content.questionType === 'single_choice' && options.length > 0 && (
+              <div className="relative max-w-3xl mx-auto pt-4" ref={optionContainerRef} style={{ minHeight: '500px' }}>
+                {/* Normal options in grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {options.map((opt, idx) => {
+                    if (!isNormalOption(opt)) return null;
+                    const meta = optionMeta[opt] || {};
+                    const hasBranch = meta.nextStepId || (currentStep.content.branches && currentStep.content.branches[opt]);
+                    const isEscapeCaptured = (meta.behavior === 'escape');
+                    return (
+                      <button
+                        key={idx}
+                        onClick={() => handleOptionSelected(opt, meta)}
+                        className="p-6 text-left border border-zinc-800 bg-zinc-950/80 rounded-2xl hover:border-white hover:bg-zinc-900 transition-all text-xl font-medium text-white flex items-center justify-between group"
+                      >
+                        <span>{opt}{isEscapeCaptured && <span className="text-green-400 text-sm ml-2">(已捕獲)</span>}</span>
+                        <div className="flex items-center gap-2">
+                          {hasBranch && <span className="text-[10px] text-zinc-500 font-mono">BRANCH</span>}
+                          <ChevronRight className="w-5 h-5 text-zinc-600 group-hover:text-white transition-colors" />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Escape options (floating) */}
+                {options.map((opt, idx) => {
+                  const meta = optionMeta[opt] || {};
+                  if (meta.behavior !== 'escape') return null;
+                  const clicksNeeded = meta.clicksNeeded || 3;
+                  const currentClicks = escapeClicks[opt] || 0;
+
+                  const rect = optionsContainerRef.current?.getBoundingClientRect();
+                  const containerW = rect ? rect.width : 600;
+                  const containerH = rect ? rect.height : 500;
+                  const padding = 120;
+                  const posX = padding + (((opt.charCodeAt(0) * 37 + currentStepIndex * 73 + currentClicks * 97) % 100) / 100) * (containerW - padding * 2 - 180);
+                  const posY = padding + (((opt.charCodeAt(1 || 0) * 41 + currentStepIndex * 53 + currentClicks * 61) % 100) / 100) * (containerH - padding * 2 - 60);
+
+                  return (
+                    <button
+                      key={idx}
+                      onClick={(e) => { e.stopPropagation(); handleEscapeOptionClick(opt, meta); }}
+                      className="p-5 border-2 border-zinc-600 bg-zinc-900/90 rounded-2xl hover:border-white transition-all text-lg font-medium text-white shadow-2xl"
+                      style={{
+                        position: 'absolute',
+                        left: posX + 'px',
+                        top: posY + 'px',
+                        transform: 'translate(-50%, -50%)',
+                        transition: 'all 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                        zIndex: 10,
+                        minWidth: '180px',
+                        animation: 'pulse-glow 2s ease-in-out infinite',
+                      }}
+                    >
+                      <div className="text-center">
+                        <div>{opt}</div>
+                        <div className="text-[10px] text-zinc-400 font-mono mt-1">
+                          {currentClicks}/{clicksNeeded} 捕獲
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             )}
 
-            {currentStep.content.questionType === 'multi_choice' && (
+            {currentStep.content.questionType === 'multi_choice' && options.length > 0 && (
               <div className="space-y-6 max-w-2xl mx-auto">
                 <div className="grid grid-cols-1 gap-3 text-left">
-                  {(currentStep.content.options || []).map((opt, idx) => {
+                  {options.map((opt, idx) => {
                     const isSelected = multiSelectValue.includes(opt);
+                    const meta = optionMeta[opt] || {};
+                    const hasSound = meta.soundEffect;
                     return (
                       <button
                         key={idx}
                         onClick={() => {
+                          if (hasSound) playOptionSound(meta.soundEffect);
                           if (isSelected) {
                             setMultiSelectValue(multiSelectValue.filter(v => v !== opt));
                           } else {
@@ -285,7 +421,10 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
                           isSelected ? 'border-white bg-zinc-800 text-white' : 'border-zinc-800 bg-zinc-950 text-zinc-400'
                         }`}
                       >
-                        <span>{opt}</span>
+                        <span className="flex items-center gap-2">
+                          {opt}
+                          {hasSound && <span className="text-[10px] text-zinc-500 font-mono">🔊</span>}
+                        </span>
                         <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${isSelected ? 'border-white bg-white text-black' : 'border-zinc-600'}`}>
                           {isSelected && '✓'}
                         </div>
@@ -353,6 +492,8 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
           style={{ width: `${((currentStepIndex + 1) / steps.length) * 100}%` }}
         />
       </div>
+
+      {effectiveBgmUrl && <AudioPlayer src={effectiveBgmUrl} />}
     </div>
   );
 }

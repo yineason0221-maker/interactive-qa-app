@@ -124,4 +124,72 @@ router.delete('/steps/:id', verifyAdminToken, (req, res) => {
   }
 });
 
+// GET /api/flow/export - Admin Only (export all steps + settings as JSON)
+router.get('/export', verifyAdminToken, (req, res) => {
+  try {
+    const steps = db.prepare('SELECT * FROM steps ORDER BY order_index ASC').all().map(row => ({
+      id: row.id,
+      order_index: row.order_index,
+      type: row.type,
+      title: row.title,
+      content: JSON.parse(row.content_json)
+    }));
+
+    const settingsRows = db.prepare('SELECT * FROM settings').all();
+    const settings = {};
+    settingsRows.forEach(r => { settings[r.key] = r.value; });
+
+    const exportData = {
+      version: '1.0',
+      exportedAt: new Date().toISOString(),
+      steps,
+      settings
+    };
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename=qa-backup-${Date.now()}.json`);
+    res.json(exportData);
+  } catch (err) {
+    console.error('Error exporting data:', err);
+    return res.status(500).json({ error: '導出備份失敗' });
+  }
+});
+
+// POST /api/flow/import - Admin Only (import steps + settings from JSON)
+router.post('/import', verifyAdminToken, (req, res) => {
+  try {
+    const { data } = req.body;
+    if (!data || !Array.isArray(data.steps)) {
+      return res.status(400).json({ error: '無效的備份資料格式，缺少 steps 陣列' });
+    }
+
+    const importTransaction = db.transaction(() => {
+      if (data.settings && typeof data.settings === 'object') {
+        const upsert = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');
+        Object.entries(data.settings).forEach(([key, value]) => {
+          upsert.run(key, String(value));
+        });
+      }
+
+      db.prepare('DELETE FROM steps').run();
+      const insertStmt = db.prepare('INSERT INTO steps (id, order_index, type, title, content_json) VALUES (?, ?, ?, ?, ?)');
+      (data.steps || []).forEach((step, idx) => {
+        insertStmt.run(
+          step.id || null,
+          idx,
+          step.type || 'subtitle',
+          step.title || '未命名步驟',
+          JSON.stringify(step.content || {})
+        );
+      });
+    });
+
+    importTransaction();
+    return res.json({ success: true, message: `已匯入 ${data.steps.length} 個步驟與設定` });
+  } catch (err) {
+    console.error('Error importing data:', err);
+    return res.status(500).json({ error: '匯入備份失敗' });
+  }
+});
+
 module.exports = router;

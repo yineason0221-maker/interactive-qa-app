@@ -1,22 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, RefreshCw, Clock, MessageSquare, Activity, User } from 'lucide-react';
+import { Trash2, RefreshCw, Clock, MessageSquare, Activity, User, AlertCircle } from 'lucide-react';
 
 export default function AdminAnalytics({ token }) {
   const [analyticsData, setAnalyticsData] = useState([]);
+  const [incompleteData, setIncompleteData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedSession, setSelectedSession] = useState(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [activeView, setActiveView] = useState('all');
 
   const fetchAnalytics = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/responses/analytics', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (data.success) {
-        setAnalyticsData(data.sessions || []);
-      }
+      const [mainRes, incompleteRes] = await Promise.all([
+        fetch('/api/responses/analytics', {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        fetch('/api/responses/incomplete', {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      ]);
+
+      const mainData = await mainRes.json();
+      const incompleteResult = await incompleteRes.json();
+
+      if (mainData.success) setAnalyticsData(mainData.sessions || []);
+      if (incompleteResult.success) setIncompleteData(incompleteResult.sessions || []);
     } catch (err) {
       console.error('Failed to load analytics:', err);
     } finally {
@@ -47,10 +56,28 @@ export default function AdminAnalytics({ token }) {
   };
 
   const formatDuration = (seconds) => {
-    if (!seconds) return '未完成 / 作答中';
+    if (!seconds && seconds !== 0) return '未完成 / 作答中';
+    if (seconds === null || seconds === undefined) return '進行中...';
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return m > 0 ? `${m} 分 ${s} 秒` : `${s} 秒`;
+  };
+
+  const formatDwellTime = (seconds) => {
+    if (!seconds && seconds !== 0) return '計算中...';
+    const m = Math.floor(seconds / 60);
+    const h = Math.floor(m / 60);
+    const s = seconds % 60;
+    if (h > 0) return `${h} 小時 ${m % 60} 分 ${s} 秒`;
+    if (m > 0) return `${m} 分 ${s} 秒`;
+    return `${s} 秒`;
+  };
+
+  const getStatusInfo = (session) => {
+    if (session.end_time) {
+      return { label: '已完成', color: 'text-green-400 bg-green-950/50 border-green-800/60', icon: '✓' };
+    }
+    return { label: '作答中', color: 'text-yellow-400 bg-yellow-950/50 border-yellow-700/60', icon: '⏳' };
   };
 
   return (
@@ -61,6 +88,11 @@ export default function AdminAnalytics({ token }) {
           <h2 className="text-xl font-bold flex items-center gap-2 text-white">
             <User className="w-5 h-5 text-zinc-400" />
             使用者作答與停留時間分析 ({analyticsData.length} 人次)
+            {incompleteData.length > 0 && (
+              <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-yellow-950/60 text-yellow-400 border border-yellow-700/60 animate-pulse">
+                {incompleteData.length} 位仍作答中
+              </span>
+            )}
           </h2>
           <p className="text-xs text-zinc-400 mt-1">查看每名受訪者的作答內容、停留秒數與行為軌跡</p>
         </div>
@@ -84,6 +116,61 @@ export default function AdminAnalytics({ token }) {
         </div>
       </div>
 
+      {/* INCOMPLETE SESSIONS SECTION */}
+      {incompleteData.length > 0 && (
+        <div className="bg-yellow-950/20 border border-yellow-700/40 rounded-2xl p-5 space-y-4">
+          <div className="flex items-center gap-2 text-yellow-400">
+            <AlertCircle className="w-5 h-5" />
+            <h3 className="text-sm font-bold uppercase tracking-wider font-mono">
+              仍作答中 ({incompleteData.length} 位使用者)
+            </h3>
+            <span className="text-[10px] text-yellow-500/70 font-mono">停留超過 15 分鐘 Render 會 sleep，資料可能丟失</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {incompleteData.map((session, idx) => {
+              const status = getStatusInfo(session);
+              return (
+                <div
+                  key={session.session_id}
+                  onClick={() => { setSelectedSession(session); setActiveView('incomplete'); }}
+                  className="p-4 rounded-2xl border border-yellow-700/40 bg-yellow-950/30 text-zinc-300 hover:border-yellow-500 cursor-pointer transition-all"
+                >
+                  <div className="flex justify-between items-start">
+                    <span className="font-bold text-base text-white">
+                      {session.nickname || `訪客 #${idx + 1}`}
+                    </span>
+                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${status.color}`}>
+                      {status.icon} {status.label}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 space-y-1">
+                    <div className="flex items-center gap-1 text-xs">
+                      <Clock className="w-3 h-3 text-yellow-400" />
+                      <span className="text-yellow-300 font-bold font-mono">
+                        停留 {formatDwellTime(session.dwell_seconds)}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-zinc-500 font-mono">
+                      開始於 {new Date(session.start_time).toLocaleString()}
+                    </div>
+                    {session.lastStepTitle && (
+                      <div className="text-[10px] text-zinc-400 truncate">
+                        最後題目: {session.lastStepTitle}
+                      </div>
+                    )}
+                    <div className="text-[10px] text-zinc-600">
+                      已回答 {session.answerCount || 0} 題
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Main Analytics Table & Detail View */}
       {loading ? (
         <div className="text-center py-12 text-zinc-500 font-mono">載入歷史紀錄中...</div>
@@ -97,31 +184,44 @@ export default function AdminAnalytics({ token }) {
           <div className="lg:col-span-1 space-y-3 max-h-[600px] overflow-y-auto pr-2">
             {analyticsData.map((session, idx) => {
               const isSelected = selectedSession?.session_id === session.session_id;
+              const isIncomplete = !session.end_time;
+              const status = getStatusInfo(session);
+              const dwellSecs = isIncomplete && !session.dwell_seconds
+                ? Math.round((Date.now() - new Date(session.start_time).getTime()) / 1000)
+                : (session.duration_seconds || 0);
+
               return (
                 <div
                   key={session.session_id}
                   onClick={() => setSelectedSession(session)}
                   className={`p-4 rounded-2xl border cursor-pointer transition-all ${
                     isSelected
-                      ? 'bg-zinc-800 border-white text-white shadow-lg'
-                      : 'bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:border-zinc-600'
+                      ? isIncomplete ? 'bg-yellow-900/30 border-yellow-500 text-white shadow-lg' : 'bg-zinc-800 border-white text-white shadow-lg'
+                      : isIncomplete ? 'bg-yellow-950/30 border-yellow-700/40 text-yellow-100 hover:border-yellow-500' : 'bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:border-zinc-600'
                   }`}
                 >
                   <div className="flex justify-between items-start">
                     <span className="font-bold text-base text-white">
                       {session.nickname || `訪客 #${idx + 1}`}
                     </span>
-                    <span className="text-xs font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">
-                      {formatDuration(session.duration_seconds)}
+                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${status.color}`}>
+                      {status.icon} {status.label}
                     </span>
                   </div>
 
-                  <div className="mt-2 text-xs text-zinc-500 font-mono space-y-1">
-                    <div className="flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-zinc-400" />
-                      <span>{new Date(session.start_time).toLocaleString()}</span>
+                  <div className="mt-2 space-y-1">
+                    <div className="flex items-center gap-1 text-xs">
+                      <Clock className={`w-3 h-3 ${isIncomplete ? 'text-yellow-400' : 'text-zinc-400'}`} />
+                      <span className={`font-mono ${isIncomplete ? 'text-yellow-300 font-bold' : 'text-zinc-400'}`}>
+                        {isIncomplete ? `停留 ${formatDwellTime(dwellSecs)}` : formatDuration(session.duration_seconds)}
+                      </span>
                     </div>
-                    <div className="truncate text-zinc-600">ID: {session.session_id}</div>
+                    <div className="text-[10px] text-zinc-500 font-mono">
+                      {new Date(session.start_time).toLocaleString()}
+                    </div>
+                    {session.device_info && (
+                      <div className="truncate text-[10px] text-zinc-600">ID: {session.session_id}</div>
+                    )}
                   </div>
                 </div>
               );
@@ -134,17 +234,27 @@ export default function AdminAnalytics({ token }) {
               <div className="space-y-6">
                 <div className="border-b border-zinc-800 pb-4 flex justify-between items-center">
                   <div>
-                    <h3 className="text-2xl font-bold text-white">
+                    <h3 className="text-2xl font-bold text-white flex items-center gap-2">
                       {selectedSession.nickname || '匿名使用者'}
+                      {!selectedSession.end_time && (
+                        <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-yellow-950/60 text-yellow-400 border border-yellow-700/60 animate-pulse">
+                          ⏳ 作答中
+                        </span>
+                      )}
                     </h3>
                     <p className="text-xs font-mono text-zinc-400 mt-1">
                       Session: {selectedSession.session_id} | 裝置: {selectedSession.device_info || '一般瀏覽器'}
                     </p>
                   </div>
                   <div className="text-right">
-                    <span className="text-xs text-zinc-500 font-mono block">停留總時間</span>
-                    <span className="text-lg font-bold text-white font-mono">
-                      {formatDuration(selectedSession.duration_seconds)}
+                    <span className="text-xs text-zinc-500 font-mono block">
+                      {selectedSession.end_time ? '停留總時間' : '已停留'}
+                    </span>
+                    <span className={`text-lg font-bold font-mono ${!selectedSession.end_time ? 'text-yellow-300' : 'text-white'}`}>
+                      {selectedSession.end_time
+                        ? formatDuration(selectedSession.duration_seconds)
+                        : formatDwellTime(selectedSession.dwell_seconds || (Math.round((Date.now() - new Date(selectedSession.start_time).getTime()) / 1000)))
+                      }
                     </span>
                   </div>
                 </div>
@@ -154,6 +264,7 @@ export default function AdminAnalytics({ token }) {
                   <h4 className="text-sm font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
                     <MessageSquare className="w-4 h-4 text-zinc-400" />
                     回答內容紀錄 ({selectedSession.answers?.length || 0} 題)
+                    {!selectedSession.end_time && <span className="text-[10px] text-yellow-500 font-mono normal-case">(未完成 - 使用者可能離開)</span>}
                   </h4>
 
                   {selectedSession.answers && selectedSession.answers.length > 0 ? (
@@ -165,6 +276,9 @@ export default function AdminAnalytics({ token }) {
                           </div>
                           <div className="text-base font-semibold text-white mt-1">
                             {ans.answer_value || '<無填寫>'}
+                          </div>
+                          <div className="text-[10px] text-zinc-600 font-mono mt-1">
+                            {new Date(ans.created_at).toLocaleString()}
                           </div>
                         </div>
                       ))}
@@ -194,7 +308,7 @@ export default function AdminAnalytics({ token }) {
               </div>
             ) : (
               <div className="text-center py-24 text-zinc-500 font-mono">
-                ← 請點擊左側列表檢視該位使用者的回答與停留時間
+                ← 請點擊左侧列表檢視該位使用者的回答與停留時間
               </div>
             )}
           </div>

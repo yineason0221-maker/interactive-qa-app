@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import PlayerView from './components/PlayerView';
-import AudioPlayer from './components/AudioPlayer';
 import AdminModal from './components/AdminModal';
 
 export default function App() {
@@ -163,9 +162,6 @@ export default function App() {
         title="Hidden Area"
         className="fixed top-0 left-0 w-12 h-12 z-40 cursor-default opacity-0"
       />
-
-      {/* Background Music Player */}
-      <AudioPlayer src={settings.bgm_url} />
 
       {/* Main Interactive QA Player */}
       <PlayerView

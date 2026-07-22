@@ -175,6 +175,23 @@ export default function AdminSettings({ token, settings, onSettingsUpdated }) {
         </div>
       </div>
 
+      {/* Data Management */}
+      <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl space-y-4">
+        <h3 className="text-lg font-bold text-white flex items-center gap-2 border-b border-zinc-800 pb-3">
+          <Upload className="w-5 h-5 text-zinc-400" />
+          設定資料備份與還原
+        </h3>
+        <p className="text-xs text-zinc-400">
+          匯出一份 JSON 備份檔案，內含所有問題流程、設定。可於更換平台或重新部屬後匯入還原。
+          <br />
+          <span className="text-yellow-500">注意：Render 免費方案重啟後，SQLite 資料庫與上傳的檔案都會清空，請定期備份。</span>
+        </p>
+        <div className="flex flex-wrap gap-3 pt-2">
+          <ExportButton token={token} onImported={onSettingsUpdated} />
+          <ImportButton token={token} onImported={onSettingsUpdated} />
+        </div>
+      </div>
+
       {/* Password Management */}
       <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl space-y-4">
         <h3 className="text-lg font-bold text-white flex items-center gap-2 border-b border-zinc-800 pb-3">
@@ -233,5 +250,71 @@ export default function AdminSettings({ token, settings, onSettingsUpdated }) {
         </form>
       </div>
     </div>
+  );
+}
+
+function ExportButton({ token, onImported }) {
+  const handleExport = async () => {
+    try {
+      const res = await fetch('/api/flow/export', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `qa-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      alert('設定備份已下載！');
+    } catch {
+      alert('匯出失敗');
+    }
+  };
+
+  return (
+    <button onClick={handleExport} className="px-4 py-2 bg-blue-900/60 hover:bg-blue-800 text-blue-200 border border-blue-700/60 text-xs font-mono rounded-xl flex items-center gap-2 transition-colors">
+      <Upload className="w-3.5 h-3.5" /> 匯出備份 (JSON)
+    </button>
+  );
+}
+
+function ImportButton({ token, onImported }) {
+  const handleImport = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data.steps || !data.settings) {
+        alert('無效的備份檔案格式');
+        return;
+      }
+      if (!confirm(`確定要匯入備份嗎？這將覆蓋現有流程與設定。\n備份時間：${data.exportedAt || '未知'}\n步驟數量：${data.steps?.length || 0}`)) return;
+
+      const res = await fetch('/api/flow/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ data })
+      });
+      const result = await res.json();
+      if (result.success) {
+        alert(`匯入成功！${result.message}`);
+        if (onImported) onImported();
+      } else {
+        alert(result.error || '匯入失敗');
+      }
+    } catch {
+      alert('無法讀取備份檔案');
+    }
+    e.target.value = '';
+  };
+
+  return (
+    <label className="px-4 py-2 bg-green-900/60 hover:bg-green-800 text-green-200 border border-green-700/60 text-xs font-mono rounded-xl flex items-center gap-2 transition-colors cursor-pointer">
+      <Upload className="w-3.5 h-3.5" /> 還原備份 (JSON)
+      <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+    </label>
   );
 }
