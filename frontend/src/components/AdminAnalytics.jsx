@@ -55,6 +55,14 @@ export default function AdminAnalytics({ token }) {
     }
   };
 
+  const parseLocalDateTime = (timeStr) => {
+    if (!timeStr) return new Date();
+    const match = timeStr.match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})/);
+    if (!match) return new Date(timeStr);
+    const [, year, month, day, hour, minute, second] = match;
+    return new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
+  };
+
   const formatDuration = (seconds) => {
     if (!seconds && seconds !== 0) return '未完成 / 作答中';
     if (seconds === null || seconds === undefined) return '進行中...';
@@ -153,7 +161,7 @@ export default function AdminAnalytics({ token }) {
                       </span>
                     </div>
                     <div className="text-[10px] text-zinc-500 font-mono">
-                      開始於 {new Date(session.start_time).toLocaleString()}
+                       開始於 {parseLocalDateTime(session.start_time).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })}
                     </div>
                     {session.lastStepTitle && (
                       <div className="text-[10px] text-zinc-400 truncate">
@@ -187,7 +195,7 @@ export default function AdminAnalytics({ token }) {
               const isIncomplete = !session.end_time;
               const status = getStatusInfo(session);
               const dwellSecs = isIncomplete && !session.dwell_seconds
-                ? Math.round((Date.now() - new Date(session.start_time).getTime()) / 1000)
+                ? Math.round((Date.now() - parseLocalDateTime(session.start_time).getTime()) / 1000)
                 : (session.duration_seconds || 0);
 
               return (
@@ -217,7 +225,7 @@ export default function AdminAnalytics({ token }) {
                       </span>
                     </div>
                     <div className="text-[10px] text-zinc-500 font-mono">
-                      {new Date(session.start_time).toLocaleString()}
+                      {parseLocalDateTime(session.start_time).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })}
                     </div>
                     {session.device_info && (
                       <div className="truncate text-[10px] text-zinc-600">ID: {session.session_id}</div>
@@ -253,7 +261,7 @@ export default function AdminAnalytics({ token }) {
                     <span className={`text-lg font-bold font-mono ${!selectedSession.end_time ? 'text-yellow-300' : 'text-white'}`}>
                       {selectedSession.end_time
                         ? formatDuration(selectedSession.duration_seconds)
-                        : formatDwellTime(selectedSession.dwell_seconds || (Math.round((Date.now() - new Date(selectedSession.start_time).getTime()) / 1000)))
+                        : formatDwellTime(selectedSession.dwell_seconds || (Math.round((Date.now() - parseLocalDateTime(selectedSession.start_time).getTime()) / 1000)))
                       }
                     </span>
                   </div>
@@ -278,7 +286,7 @@ export default function AdminAnalytics({ token }) {
                             {ans.answer_value || '<無填寫>'}
                           </div>
                           <div className="text-[10px] text-zinc-600 font-mono mt-1">
-                            {new Date(ans.created_at).toLocaleString()}
+                            {parseLocalDateTime(ans.created_at).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })}
                           </div>
                         </div>
                       ))}
@@ -300,7 +308,7 @@ export default function AdminAnalytics({ token }) {
                       <div key={i} className="text-xs font-mono flex justify-between items-center bg-zinc-950/50 px-3 py-2 rounded-lg text-zinc-400 border border-zinc-800/40">
                         <span className="text-white font-semibold">{log.event_type}</span>
                         <span className="text-zinc-500">{log.detail}</span>
-                        <span className="text-zinc-600">{new Date(log.created_at).toLocaleTimeString()}</span>
+                        <span className="text-zinc-600">{parseLocalDateTime(log.created_at).toLocaleTimeString('zh-TW', { timeZone: 'Asia/Taipei' })}</span>
                       </div>
                     ))}
                   </div>

@@ -162,7 +162,7 @@ router.get('/export', verifyAdminToken, (req, res) => {
     const zip = new AdmZip();
     zip.addFile('backup.json', Buffer.from(JSON.stringify(exportData, null, 2), 'utf8'));
 
-    const uploadsDir = path.join(__dirname, '../../uploads');
+    const uploadsDir = path.join(__dirname, '../uploads');
     console.log('[Export] Uploads dir:', uploadsDir, 'exists:', fs.existsSync(uploadsDir));
     
     let uploadedFileCount = 0;
