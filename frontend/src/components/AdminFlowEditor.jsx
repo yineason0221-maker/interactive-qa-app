@@ -180,7 +180,8 @@ export default function AdminFlowEditor({ token, steps: initialSteps, onSaveSucc
   const renderOptionMetaEditor = () => {
     if (!activeStep || !activeStep.content || activeStep.content.questionType !== 'single_choice') return null;
     const currentOptionMeta = activeStep.content.optionMeta || {};
-    const stepIds = steps.map(s => ({ id: s.id, title: s.title }));
+    const stepIds = steps.map(s => ({ id: s.id, title: s.title, section: s.section || '' }));
+    const hasSections = stepIds.some(s => s.section);
 
     const renderClickTexts = (meta, opt) => {
       if (meta.behavior !== 'jump') return null;
@@ -269,7 +270,7 @@ export default function AdminFlowEditor({ token, steps: initialSteps, onSaveSucc
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] text-zinc-500 block mb-0.5">分支到關卡 ID</label>
+                  <label className="text-[10px] text-zinc-500 block mb-0.5">分支到關卡</label>
                   <select
                     value={meta.nextStepId || ''}
                     onChange={(e) => {
@@ -280,7 +281,7 @@ export default function AdminFlowEditor({ token, steps: initialSteps, onSaveSucc
                   >
                     <option value="">→ 下一關 (預設)</option>
                     {stepIds.map(s => (
-                      <option key={s.id} value={s.id}>→ {s.title} (ID: {s.id})</option>
+                      <option key={s.id} value={s.id}>→ {s.title} {s.section ? `(${s.section})` : ''} (ID: {s.id})</option>
                     ))}
                   </select>
                 </div>
@@ -303,8 +304,8 @@ export default function AdminFlowEditor({ token, steps: initialSteps, onSaveSucc
                     </label>
                   </div>
                 </div>
-                {renderClickTexts(meta, opt)}
               </div>
+              {renderClickTexts(meta, opt)}
             </div>
           );
         })}
@@ -419,30 +420,34 @@ export default function AdminFlowEditor({ token, steps: initialSteps, onSaveSucc
           })}
         </div>
 
-        {/* Step Inspector & Property Editor */}
-        <div className="lg:col-span-2 bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-          {activeStep ? (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-zinc-800 pb-4">
-                <div>
-                  <label className="text-xs font-mono text-zinc-400 block mb-1">關卡標題 / 識別名</label>
-                  <input
-                    type="text"
-                    value={activeStep.title || ''}
-                    onChange={(e) => updateActiveStep({ title: e.target.value })}
-                    className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white focus:border-white focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-mono text-zinc-400 block mb-1">類型 (Type)</label>
-                  <input
-                    type="text"
-                    disabled
-                    value={activeStep.type}
-                    className="w-full bg-zinc-950/50 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-zinc-500 uppercase font-mono"
-                  />
-                </div>
+      {/* Step Inspector & Property Editor */}
+      <div className="lg:col-span-2 bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+        {activeStep ? (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-zinc-800 pb-4">
+              <div>
+                <label className="text-xs font-mono text-zinc-400 block mb-1">關卡標題 / 識別名</label>
+                <input
+                  type="text"
+                  value={activeStep.title || ''}
+                  onChange={(e) => updateActiveStep({ title: e.target.value })}
+                  className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white focus:border-white focus:outline-none"
+                />
               </div>
+              <div>
+                <label className="text-xs font-mono text-zinc-400 block mb-1">區段標籤 (用於分支路由)</label>
+                <input
+                  type="text"
+                  placeholder="例如：A區段、B區段，留空=通用關卡"
+                  value={activeStep.section || ''}
+                  onChange={(e) => updateActiveStep({ section: e.target.value })}
+                  className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white focus:border-white focus:outline-none"
+                />
+                <p className="text-[10px] text-zinc-500 mt-1 font-mono">
+                  設定相同區段標籤的關卡會在同一個分支內。空白表示通用關卡。
+                </p>
+              </div>
+            </div>
 
               {/* SUBTITLE EDITOR */}
               {activeStep.type === 'subtitle' && (

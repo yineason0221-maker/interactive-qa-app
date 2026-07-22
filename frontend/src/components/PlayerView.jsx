@@ -50,8 +50,6 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
 
   const handleJumpOptionClick = (opt, meta) => {
     const clicksNeeded = meta.clicksNeeded || 3;
-    const clickTexts = meta.clickTexts || {};
-    const currentClickText = clickTexts[String(jumpClicks[opt] + 1)] || '';
 
     if (meta.soundEffect) playOptionSound(meta.soundEffect);
 
@@ -62,6 +60,11 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
         handleOptionSelected(opt, meta);
       } else {
         onLogEvent('JUMP_CLICK', `Clicked "${opt}" (${newCount}/${clicksNeeded})`);
+        // Randomize position on each click
+        setOptionPositions(pos => ({
+          ...pos,
+          [opt]: getRandomPosition()
+        }));
       }
       return { ...prev, [opt]: newCount };
     });
@@ -72,11 +75,13 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
 
     let targetIndex = currentStepIndex + 1;
 
+    // Branch from option meta nextStepId (highest priority)
     if (meta?.nextStepId) {
       const foundIndex = steps.findIndex(s => s.id === meta.nextStepId);
       if (foundIndex >= 0) targetIndex = foundIndex;
     }
 
+    // Branch from step-level branches map (fallback)
     const branches = currentStep.content.branches || {};
     if (branches[opt] !== undefined && !meta?.nextStepId) {
       const foundIndex = steps.findIndex(s => s.id === branches[opt]);
@@ -383,9 +388,6 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
                     const posX = cx + Math.cos(angle) * dist;
                     const posY = cy + Math.sin(angle) * dist;
 
-                    const clickTexts = meta.clickTexts || {};
-                    const displayText = clickTexts[String(currentClicks + 1)] || opt;
-
                     return (
                       <button
                         key={idx}
@@ -403,10 +405,7 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
                         }}
                       >
                         <div className="text-center">
-                          <div>{displayText}</div>
-                          <div className="text-[10px] text-zinc-400 font-mono mt-1">
-                            {currentClicks}/{clicksNeeded}
-                          </div>
+                          <div>{opt}</div>
                         </div>
                       </button>
                     );
