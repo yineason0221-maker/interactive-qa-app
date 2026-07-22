@@ -11,16 +11,15 @@ router.post('/start', (req, res) => {
   }
 
   try {
-    const nowLocal = db.prepare("SELECT strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime') as now").get().now;
-    const nowISO = nowLocal.replace(' ', 'T') + '+08:00';
+    const nowUTC = db.prepare("SELECT strftime('%Y-%m-%dT%H:%M:%S', 'now', 'utc') as now").get().now;
     const stmt = db.prepare(`
       INSERT INTO sessions (session_id, start_time, device_info)
       VALUES (?, ?, ?)
       ON CONFLICT(session_id) DO UPDATE SET start_time=?
     `);
-    stmt.run(sessionId, nowLocal, deviceInfo || '', nowLocal);
+    stmt.run(sessionId, nowUTC, deviceInfo || '', nowUTC);
 
-    return res.json({ success: true, sessionId, startTime: nowISO });
+    return res.json({ success: true, sessionId, startTime: nowUTC });
   } catch (err) {
     console.error('Error starting session:', err);
     return res.status(500).json({ error: '建立 session 失敗' });
@@ -81,17 +80,22 @@ router.post('/finish', (req, res) => {
   }
 
   try {
-    const result = db.prepare(`
+    const session = db.prepare('SELECT start_time FROM sessions WHERE session_id = ?').get(sessionId);
+    const startISO = session && session.start_time ? session.start_time.replace(' ', 'T') + 'Z' : null;
+    const startTime = startISO ? new Date(startISO).getTime() : Date.now();
+    const endTime = Date.now();
+    const durationSeconds = Math.max(0, Math.round((endTime - startTime) / 1000));
+
+    const endUTC = db.prepare("SELECT strftime('%Y-%m-%dT%H:%M:%S', 'now', 'utc') as now").get().now;
+    db.prepare(`
       UPDATE sessions
-      SET end_time = strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime'),
-          duration_seconds = CAST(ROUND((julianday('now', 'localtime') - julianday(start_time)) * 86400) AS INTEGER),
+      SET end_time = ?,
+          duration_seconds = ?,
           nickname = COALESCE(?, nickname)
       WHERE session_id = ?
-    `).run(nickname || null, sessionId);
+    `).run(endUTC, durationSeconds, nickname || null, sessionId);
 
-    const updated = db.prepare('SELECT duration_seconds FROM sessions WHERE session_id = ?').get(sessionId);
-
-    return res.json({ success: true, durationSeconds: updated?.duration_seconds || 0 });
+    return res.json({ success: true, durationSeconds });
   } catch (err) {
     console.error('Error finishing session:', err);
     return res.status(500).json({ error: '更新完成狀態失敗' });
