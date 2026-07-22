@@ -16,7 +16,7 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
   const [startTime, setStartTime] = useState(null);
 
   const [jumpClicks, setJumpClicks] = useState({});
-  const [jumpPositions, setJumpPositions] = useState({});
+  const jumpPositionsRef = useRef({});
   const optionsContainerRef = useRef(null);
   const stepTimerRef = useRef(null);
   const bgmStartTimeRef = useRef(null);
@@ -58,21 +58,24 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
 
   const handleJumpOptionClick = (opt, meta) => {
     const clicksNeeded = meta.clicksNeeded || 3;
-
     if (meta.soundEffect) playOptionSound(meta.soundEffect);
+
+    const rect = optionsContainerRef.current?.getBoundingClientRect();
+    const cw = rect ? rect.width : 800;
+    const ch = rect ? rect.height : 500;
 
     setJumpClicks(prev => {
       const newCount = (prev[opt] || 0) + 1;
       if (newCount >= clicksNeeded) {
         onLogEvent('JUMP_CAPTURED', `Captured "${opt}" after ${clicksNeeded} clicks`);
-        setJumpPositions({});
-        handleOptionSelected(opt, meta);
+        jumpPositionsRef.current = {};
+        setTimeout(() => handleOptionSelected(opt, meta), 200);
       } else {
         onLogEvent('JUMP_CLICK', `Clicked "${opt}" (${newCount}/${clicksNeeded})`);
-        setJumpPositions(pos => ({
-          ...pos,
-          [opt]: getRandomPosition()
-        }));
+        jumpPositionsRef.current = {
+          ...jumpPositionsRef.current,
+          [opt]: getRandomPosition(cw, ch)
+        };
       }
       return { ...prev, [opt]: newCount };
     });
@@ -202,7 +205,7 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
   useEffect(() => {
     if (!isStarted || !currentStep) return;
     setJumpClicks({});
-    setJumpPositions({});
+    jumpPositionsRef.current = {};
     setSubtitleOpacity(0);
   }, [currentStepIndex, isStarted]);
 
@@ -415,7 +418,7 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
                   const rect = optionsContainerRef.current?.getBoundingClientRect();
                   const cw = rect ? rect.width : 800;
                   const ch = rect ? rect.height : 500;
-                  const pos = jumpPositions[opt] || getRandomPosition(cw, ch);
+                  const pos = jumpPositionsRef.current[opt] || getRandomPosition(cw, ch);
 
                   return (
                     <button
