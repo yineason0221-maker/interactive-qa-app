@@ -16,6 +16,7 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
   const [startTime, setStartTime] = useState(null);
 
   const [jumpClicks, setJumpClicks] = useState({});
+  const [jumpDisplayTexts, setJumpDisplayTexts] = useState({});
   const jumpPositionsRef = useRef({});
   const optionsContainerRef = useRef(null);
   const stepTimerRef = useRef(null);
@@ -58,27 +59,37 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
 
   const handleJumpOptionClick = (opt, meta) => {
     const clicksNeeded = meta.clicksNeeded || 3;
+    const clickTexts = meta.clickTexts || {};
+    const prevClicks = jumpClicks[opt] || 0;
+    const nextClickIndex = prevClicks + 1;
+    const displayText = clickTexts[String(nextClickIndex)] || '';
+
     if (meta.soundEffect) playOptionSound(meta.soundEffect);
 
-    const rect = optionsContainerRef.current?.getBoundingClientRect();
-    const cw = rect ? rect.width : 800;
-    const ch = rect ? rect.height : 500;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const margin = 100;
+    const newX = margin + Math.random() * Math.max(vw - margin * 2 - 200, 100);
+    const newY = margin + Math.random() * Math.max(vh - margin * 2 - 100, 60);
 
-    setJumpClicks(prev => {
-      const newCount = (prev[opt] || 0) + 1;
-      if (newCount >= clicksNeeded) {
-        onLogEvent('JUMP_CAPTURED', `Captured "${opt}" after ${clicksNeeded} clicks`);
-        jumpPositionsRef.current = {};
-        setTimeout(() => handleOptionSelected(opt, meta), 200);
-      } else {
-        onLogEvent('JUMP_CLICK', `Clicked "${opt}" (${newCount}/${clicksNeeded})`);
-        jumpPositionsRef.current = {
-          ...jumpPositionsRef.current,
-          [opt]: getRandomPosition(cw, ch)
-        };
+    const newCount = prevClicks + 1;
+    if (newCount >= clicksNeeded) {
+      onLogEvent('JUMP_CAPTURED', `Captured "${opt}" after ${clicksNeeded} clicks`);
+      jumpPositionsRef.current = {};
+      setJumpDisplayTexts({});
+      setJumpClicks(prev => ({ ...prev, [opt]: newCount }));
+      setTimeout(() => handleOptionSelected(opt, meta), 250);
+    } else {
+      onLogEvent('JUMP_CLICK', `Clicked "${opt}" (${newCount}/${clicksNeeded})`);
+      jumpPositionsRef.current = {
+        ...jumpPositionsRef.current,
+        [opt]: { x: Math.round(newX), y: Math.round(newY) }
+      };
+      if (displayText) {
+        setJumpDisplayTexts(prev => ({ ...prev, [opt]: displayText }));
       }
-      return { ...prev, [opt]: newCount };
-    });
+      setJumpClicks(prev => ({ ...prev, [opt]: newCount }));
+    }
   };
 
   const handleOptionSelected = (opt, meta) => {
@@ -205,6 +216,7 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
   useEffect(() => {
     if (!isStarted || !currentStep) return;
     setJumpClicks({});
+    setJumpDisplayTexts({});
     jumpPositionsRef.current = {};
     setSubtitleOpacity(0);
   }, [currentStepIndex, isStarted]);
@@ -415,10 +427,8 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
                   const currentClicks = jumpClicks[opt] || 0;
                   if (currentClicks === 0) return null;
 
-                  const rect = optionsContainerRef.current?.getBoundingClientRect();
-                  const cw = rect ? rect.width : 800;
-                  const ch = rect ? rect.height : 500;
-                  const pos = jumpPositionsRef.current[opt] || getRandomPosition(cw, ch);
+                  const pos = jumpPositionsRef.current[opt] || { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+                  const displayText = jumpDisplayTexts[opt] || '';
 
                   return (
                     <button
@@ -426,18 +436,23 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
                       onClick={(e) => { e.stopPropagation(); handleJumpOptionClick(opt, meta); }}
                       className="p-5 border-2 border-zinc-600 bg-zinc-900/90 rounded-2xl hover:border-white transition-all text-lg font-medium text-white shadow-2xl"
                       style={{
-                        position: 'absolute',
+                        position: 'fixed',
                         left: pos.x + 'px',
                         top: pos.y + 'px',
                         transform: 'translate(-50%, -50%)',
                         transition: 'all 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
-                        zIndex: 10,
+                        zIndex: 50,
                         minWidth: '160px',
                         animation: 'pulse-glow 2s ease-in-out infinite',
                       }}
                     >
                       <div className="text-center">
                         <div>{opt}</div>
+                        {displayText && (
+                          <div className="text-[10px] text-zinc-400 font-mono mt-1 animate-pulse">
+                            {displayText}
+                          </div>
+                        )}
                       </div>
                     </button>
                   );
