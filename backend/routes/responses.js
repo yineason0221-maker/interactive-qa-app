@@ -71,22 +71,32 @@ router.post('/log', (req, res) => {
 
 // POST /api/responses/finish
 router.post('/finish', (req, res) => {
-  const { sessionId, nickname, durationSeconds } = req.body;
+  const { sessionId, nickname } = req.body;
   if (!sessionId) {
     return res.status(400).json({ error: '缺少 sessionId' });
   }
 
   try {
+    const session = db.prepare('SELECT start_time FROM sessions WHERE session_id = ?').get(sessionId);
+    
+    let durationSeconds = 0;
+    if (session && session.start_time) {
+      const startTime = new Date(session.start_time);
+      const endTime = new Date();
+      durationSeconds = Math.max(0, Math.round((endTime - startTime) / 1000));
+    }
+
     db.prepare(`
       UPDATE sessions
       SET end_time = CURRENT_TIMESTAMP,
           duration_seconds = ?,
           nickname = COALESCE(?, nickname)
       WHERE session_id = ?
-    `).run(durationSeconds || 0, nickname || null, sessionId);
+    `).run(durationSeconds, nickname || null, sessionId);
 
-    return res.json({ success: true });
+    return res.json({ success: true, durationSeconds });
   } catch (err) {
+    console.error('Error finishing session:', err);
     return res.status(500).json({ error: '更新完成狀態失敗' });
   }
 });

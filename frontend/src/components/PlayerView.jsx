@@ -13,7 +13,10 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [subtitleOpacity, setSubtitleOpacity] = useState(0);
   const [completed, setCompleted] = useState(false);
-  const [startTime, setStartTime] = useState(null);
+  const [startTime, setStartTime] = useState(() => {
+    const stored = sessionStorage.getItem('interactive_qa_startTime');
+    return stored ? Number(stored) : null;
+  });
 
   const [jumpClicks, setJumpClicks] = useState({});
   const [jumpDisplayTexts, setJumpDisplayTexts] = useState({});
@@ -224,12 +227,14 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
   const handleStart = () => {
     if (settings.force_fullscreen === 'true') toggleFullscreen();
     onStartSession();
+    const now = Date.now();
     setIsStarted(true);
-    setStartTime(Date.now());
+    setStartTime(now);
+    sessionStorage.setItem('interactive_qa_startTime', String(now));
     setCurrentStepIndex(0);
     setSubtitleOpacity(0);
     bgmIndexRef.current = 0;
-    bgmStartTimeRef.current = Date.now();
+    bgmStartTimeRef.current = now;
     onLogEvent('START_JOURNEY', 'User clicked start journey');
   };
 
