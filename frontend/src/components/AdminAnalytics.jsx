@@ -57,10 +57,10 @@ export default function AdminAnalytics({ token }) {
 
   const parseLocalDateTime = (timeStr) => {
     if (!timeStr) return new Date();
-    const match = timeStr.match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})/);
-    if (!match) return new Date(timeStr);
-    const [, year, month, day, hour, minute, second] = match;
-    return new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
+    const normalized = timeStr.replace(' ', 'T');
+    const withZ = normalized.endsWith('Z') ? normalized : normalized + 'Z';
+    const d = new Date(withZ);
+    return isNaN(d.getTime()) ? new Date(timeStr) : d;
   };
 
   const formatDuration = (seconds) => {

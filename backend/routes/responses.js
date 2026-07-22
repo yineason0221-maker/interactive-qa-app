@@ -11,14 +11,13 @@ router.post('/start', (req, res) => {
   }
 
   try {
-    const nowUTC = db.prepare("SELECT strftime('%Y-%m-%dT%H:%M:%S', 'now', 'utc') as now").get().now;
+    const nowUTC = db.prepare("SELECT strftime('%Y-%m-%dT%H:%M:%S', 'now', 'utc') as now").get().now + 'Z';
     const stmt = db.prepare(`
       INSERT INTO sessions (session_id, start_time, device_info)
       VALUES (?, ?, ?)
       ON CONFLICT(session_id) DO UPDATE SET start_time=?
     `);
     stmt.run(sessionId, nowUTC, deviceInfo || '', nowUTC);
-
     return res.json({ success: true, sessionId, startTime: nowUTC });
   } catch (err) {
     console.error('Error starting session:', err);
@@ -39,11 +38,11 @@ router.post('/answer', (req, res) => {
       db.prepare('UPDATE sessions SET nickname = ? WHERE session_id = ?').run(nickname, sessionId);
     }
 
-    const nowLocal = db.prepare("SELECT strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime') as now").get().now;
+    const nowUTC = db.prepare("SELECT strftime('%Y-%m-%dT%H:%M:%S', 'now', 'utc') as now").get().now + 'Z';
     db.prepare(`
       INSERT INTO answers (session_id, step_id, step_title, question_text, answer_value, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(sessionId, stepId || null, stepTitle || '', questionText || '', String(answerValue), nowLocal);
+    `).run(sessionId, stepId || null, stepTitle || '', questionText || '', String(answerValue), nowUTC);
 
     return res.json({ success: true });
   } catch (err) {
@@ -60,11 +59,11 @@ router.post('/log', (req, res) => {
   }
 
   try {
-    const nowLocal = db.prepare("SELECT strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime') as now").get().now;
+    const nowUTC = db.prepare("SELECT strftime('%Y-%m-%dT%H:%M:%S', 'now', 'utc') as now").get().now + 'Z';
     db.prepare(`
       INSERT INTO logs (session_id, event_type, detail, created_at)
       VALUES (?, ?, ?, ?)
-    `).run(sessionId, eventType, detail || '', nowLocal);
+    `).run(sessionId, eventType, detail || '', nowUTC);
 
     return res.json({ success: true });
   } catch (err) {
@@ -144,7 +143,7 @@ router.get('/incomplete', verifyAdminToken, (req, res) => {
   try {
     const incomplete = db.prepare(`
       SELECT s.*,
-        ROUND((julianday('now', 'localtime') - julianday(s.start_time)) * 86400) as dwell_seconds
+        ROUND((julianday('now', 'utc') - julianday(s.start_time)) * 86400) as dwell_seconds
       FROM sessions s
       WHERE s.end_time IS NULL OR s.end_time = ''
       ORDER BY s.start_time DESC

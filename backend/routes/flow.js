@@ -5,6 +5,37 @@ const { verifyAdminToken } = require('../middleware/auth');
 const multer = require('multer');
 const zipStorage = multer.memoryStorage();
 const zipUpload = multer({ storage: zipStorage, limits: { fileSize: 200 * 1024 * 1024 } });
+const crypto = require('crypto');
+
+function getEncryptionKey() {
+  const secret = process.env.JWT_SECRET || 'default-backup-encryption-key';
+  const key = crypto.scryptSync(secret, 'backup-salt', 32);
+  return key;
+}
+
+function encryptField(text) {
+  if (!text) return '';
+  const key = getEncryptionKey();
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+  const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+  return iv.toString('hex') + ':' + encrypted.toString('hex');
+}
+
+function decryptField(encryptedText) {
+  if (!encryptedText || !encryptedText.includes(':')) return encryptedText;
+  const key = getEncryptionKey();
+  const [ivHex, encryptedHex] = encryptedText.split(':');
+  const iv = Buffer.from(ivHex, 'hex');
+  const encrypted = Buffer.from(encryptedHex, 'hex');
+  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+  try {
+    const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+    return decrypted.toString('utf8');
+  } catch {
+    return encryptedText;
+  }
+}
 
 // GET /api/flow/steps - Public (for players and editor preview)
 router.get('/steps', (req, res) => {
