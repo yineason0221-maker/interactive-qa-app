@@ -365,7 +365,7 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
               <div className="relative max-w-3xl mx-auto pt-4" ref={optionsContainerRef}>
                 {options.map((opt, idx) => {
                   const meta = optionMeta[opt] || {};
-                  const behavior = meta.behavior || 'normal';
+                  const behavior = meta.behavior === 'jump' ? 'jump' : 'normal';
                   const clicksNeeded = meta.clicksNeeded || 1;
                   const currentClicks = jumpClicks[opt] || 0;
                   const isCaptured = currentClicks >= clicksNeeded;

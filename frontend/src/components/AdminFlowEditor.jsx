@@ -178,7 +178,7 @@ export default function AdminFlowEditor({ token, steps: initialSteps, onSaveSucc
   const activeStep = steps[activeStepIndex];
 
   const renderOptionMetaEditor = () => {
-    if (activeStep.content.questionType !== 'single_choice') return null;
+    if (!activeStep || !activeStep.content || activeStep.content.questionType !== 'single_choice') return null;
     const currentOptionMeta = activeStep.content.optionMeta || {};
     const stepIds = steps.map(s => ({ id: s.id, title: s.title }));
 

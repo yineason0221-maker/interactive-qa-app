@@ -7,10 +7,10 @@ export default function AdminSettings({ token, settings, onSettingsUpdated }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [pwdMessage, setPwdMessage] = useState({ text: '', isError: false });
 
-  const [siteTitle, setSiteTitle] = useState(settings?.site_title || '神秘互動問答');
-  const [bgmUrl, setBgmUrl] = useState(settings?.bgm_url || '');
-  const [forceFullscreen, setForceFullscreen] = useState(settings?.force_fullscreen || 'true');
-  const [bgmTimeline, setBgmTimeline] = useState(settings?.bgm_timeline || []);
+  const [siteTitle, setSiteTitle] = useState('');
+  const [bgmUrl, setBgmUrl] = useState('');
+  const [forceFullscreen, setForceFullscreen] = useState('true');
+  const [bgmTimeline, setBgmTimeline] = useState([]);
 
   const [uploading, setUploading] = useState(false);
   const [lastUploadedUrl, setLastUploadedUrl] = useState('');
@@ -20,9 +20,8 @@ export default function AdminSettings({ token, settings, onSettingsUpdated }) {
       setSiteTitle(settings.site_title || '神秘互動問答');
       setBgmUrl(settings.bgm_url || '');
       setForceFullscreen(settings.force_fullscreen || 'true');
-      if (settings.bgm_timeline && Array.isArray(settings.bgm_timeline)) {
-        setBgmTimeline(settings.bgm_timeline);
-      }
+      const tl = settings.bgm_timeline;
+      setBgmTimeline((Array.isArray(tl) ? tl : (typeof tl === 'string' ? (() => { try { return JSON.parse(tl); } catch { return []; } })() : [])));
     }
   }, [settings]);
 

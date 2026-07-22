@@ -27,7 +27,12 @@ router.get('/settings', (req, res) => {
     const rows = db.prepare('SELECT * FROM settings').all();
     const settings = {};
     rows.forEach(r => {
-      settings[r.key] = r.value;
+      if (r.key === 'bgm_timeline') {
+        try { settings[r.key] = JSON.parse(r.value || '[]'); }
+        catch { settings[r.key] = []; }
+      } else {
+        settings[r.key] = r.value;
+      }
     });
     return res.json({ success: true, settings });
   } catch (err) {
