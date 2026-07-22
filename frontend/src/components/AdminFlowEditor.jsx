@@ -606,6 +606,8 @@ export default function AdminFlowEditor({ token, steps: initialSteps, onSaveSucc
                       </button>
                     </div>
                   )}
+                  
+                  {renderOptionMetaEditor()}
                 </div>
               )}
               
