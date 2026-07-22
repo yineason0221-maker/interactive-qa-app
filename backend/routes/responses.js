@@ -80,7 +80,8 @@ router.post('/finish', (req, res) => {
 
   try {
     const session = db.prepare('SELECT start_time FROM sessions WHERE session_id = ?').get(sessionId);
-    const startISO = session && session.start_time ? session.start_time.replace(' ', 'T') + 'Z' : null;
+    const rawStart = session && session.start_time ? session.start_time : null;
+    const startISO = rawStart ? rawStart.replace(/Z$/, '').replace(' ', 'T') + 'Z' : null;
     const startTime = startISO ? new Date(startISO).getTime() : Date.now();
     const endTime = Date.now();
     const durationSeconds = Math.max(0, Math.round((endTime - startTime) / 1000));
