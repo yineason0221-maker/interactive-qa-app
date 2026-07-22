@@ -11,16 +11,17 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
   const [nickname, setNickname] = useState('');
   const [isStarted, setIsStarted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [subtitleOpacity, setSubtitleOpacity] = useState(1);
+  const [subtitleOpacity, setSubtitleOpacity] = useState(0);
   const [completed, setCompleted] = useState(false);
   const [startTime, setStartTime] = useState(null);
 
-  const [escapeClicks, setEscapeClicks] = useState({});
-  const optionContainerRef = useRef(null);
-
+  const [jumpClicks, setJumpClicks] = useState({});
+  const optionsContainerRef = useRef(null);
   const stepTimerRef = useRef(null);
+  const bgmStartTimeRef = useRef(null);
+  const bgmIndexRef = useRef(0);
+
   const currentStep = steps[currentStepIndex];
-  const effectiveBgmUrl = currentStep?.content?.bgm_url || settings.bgm_url || '';
 
   const isNicknameQuestion = (step) => {
     return currentStepIndex === 0 || step.title.includes('暱稱') || step.title.includes('名字');
@@ -47,17 +48,20 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
     }
   };
 
-  const handleEscapeOptionClick = (opt, meta) => {
+  const handleJumpOptionClick = (opt, meta) => {
     const clicksNeeded = meta.clicksNeeded || 3;
+    const clickTexts = meta.clickTexts || {};
+    const currentClickText = clickTexts[String(jumpClicks[opt] + 1)] || '';
+
     if (meta.soundEffect) playOptionSound(meta.soundEffect);
 
-    setEscapeClicks(prev => {
+    setJumpClicks(prev => {
       const newCount = (prev[opt] || 0) + 1;
-      if (newCount < clicksNeeded) {
-        onLogEvent('ESCAPE_CLICK', `Clicked "${opt}" (${newCount}/${clicksNeeded})`);
-      } else {
-        onLogEvent('ESCAPE_CAPTURED', `Captured "${opt}" after ${clicksNeeded} clicks`);
+      if (newCount >= clicksNeeded) {
+        onLogEvent('JUMP_CAPTURED', `Captured "${opt}" after ${clicksNeeded} clicks`);
         handleOptionSelected(opt, meta);
+      } else {
+        onLogEvent('JUMP_CLICK', `Clicked "${opt}" (${newCount}/${clicksNeeded})`);
       }
       return { ...prev, [opt]: newCount };
     });
@@ -159,7 +163,7 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
       if (document.exitFullscreen) {
         document.exitFullscreen();
         setIsFullscreen(false);
-        onLogEvent('EXIT_FULLSCREEN', 'User exited fullscreen');
+        onLogEvent('EXIT_FULLSCREEN', 'User exits fullscreen');
       }
     }
   };
@@ -176,12 +180,16 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
     setIsStarted(true);
     setStartTime(Date.now());
     setCurrentStepIndex(0);
+    setSubtitleOpacity(0);
+    bgmIndexRef.current = 0;
+    bgmStartTimeRef.current = Date.now();
     onLogEvent('START_JOURNEY', 'User clicked start journey');
   };
 
   useEffect(() => {
     if (!isStarted || !currentStep) return;
-    setEscapeClicks({});
+    setJumpClicks({});
+    setSubtitleOpacity(0);
   }, [currentStepIndex, isStarted]);
 
   useEffect(() => {
@@ -210,6 +218,28 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
       setMultiSelectValue(Array.isArray(answers[currentStep.id]) ? answers[currentStep.id] : []);
     }
   }, [currentStepIndex, isStarted]);
+
+  // BGM Timeline logic
+  const bgmTimeline = settings.bgm_timeline || [];
+  const getCurrentBgm = () => {
+    if (!isStarted || bgmTimeline.length === 0) return '';
+    const elapsed = (Date.now() - (bgmStartTimeRef.current || Date.now())) / 1000;
+    let accumulated = 0;
+    for (let i = 0; i < bgmTimeline.length; i++) {
+      const dur = bgmTimeline[i].duration || 30;
+      if (elapsed < accumulated + dur) {
+        if (bgmIndexRef.current !== i) {
+          bgmIndexRef.current = i;
+          bgmStartTimeRef.current = Date.now() - (accumulated * 1000);
+        }
+        return bgmTimeline[i].url || '';
+      }
+      accumulated += dur;
+    }
+    return bgmTimeline[bgmTimeline.length - 1]?.url || '';
+  };
+
+  const currentBgmUrl = getCurrentBgm();
 
   // Render Cover / Start Screen
   if (!isStarted) {
@@ -244,8 +274,6 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
             </button>
           </div>
         </div>
-
-        {effectiveBgmUrl && <AudioPlayer src={effectiveBgmUrl} />}
       </div>
     );
   }
@@ -271,21 +299,12 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
             </button>
           </div>
         </div>
-        {effectiveBgmUrl && <AudioPlayer src={effectiveBgmUrl} />}
       </div>
     );
   }
 
   const options = currentStep?.content?.options || [];
   const optionMeta = currentStep?.content?.optionMeta || {};
-
-  const isNormalOption = (opt) => {
-    const meta = optionMeta[opt] || {};
-    const clicksNeeded = meta.clicksNeeded || 1;
-    const isEscape = meta.behavior === 'escape';
-    const captured = isEscape && (escapeClicks[opt] || 0) >= clicksNeeded;
-    return !isEscape || captured;
-  };
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col justify-between p-6 md:p-12 relative overflow-hidden select-none">
@@ -301,8 +320,8 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
         {currentStep.type === 'subtitle' && (
           <div
             onClick={goToNextStep}
-            className="cursor-pointer transition-opacity duration-700 w-full"
-            style={{ opacity: subtitleOpacity }}
+            className="cursor-pointer w-full"
+            style={{ opacity: subtitleOpacity, transition: 'opacity 0.7s ease-in-out' }}
           >
             <p className={`font-medium tracking-wide leading-relaxed text-white ${
               currentStep.content.textSize === 'large' ? 'text-4xl md:text-6xl' : 'text-2xl md:text-4xl'
@@ -343,67 +362,67 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
             )}
 
             {currentStep.content.questionType === 'single_choice' && options.length > 0 && (
-              <div className="relative max-w-3xl mx-auto pt-4" ref={optionsContainerRef} style={{ minHeight: options.some(o => (optionMeta[o] || {}).behavior === 'escape') ? '500px' : 'auto' }}>
-                {/* Normal options in grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {options.map((opt, idx) => {
-                    if (!isNormalOption(opt)) return null;
-                    const meta = optionMeta[opt] || {};
-                    const hasBranch = meta.nextStepId || (currentStep.content.branches && currentStep.content.branches[opt]);
-                    const isEscapeCaptured = (meta.behavior === 'escape');
+              <div className="relative max-w-3xl mx-auto pt-4" ref={optionsContainerRef}>
+                {options.map((opt, idx) => {
+                  const meta = optionMeta[opt] || {};
+                  const behavior = meta.behavior || 'normal';
+                  const clicksNeeded = meta.clicksNeeded || 1;
+                  const currentClicks = jumpClicks[opt] || 0;
+                  const isCaptured = currentClicks >= clicksNeeded;
+
+                  if (behavior === 'jump' && !isCaptured) {
+                    const rect = optionsContainerRef.current?.getBoundingClientRect();
+                    const cw = rect ? rect.width : 600;
+                    const ch = rect ? rect.height : 500;
+                    const pad = 120;
+                    const cx = cw / 2;
+                    const cy = ch / 2;
+                    const radius = Math.min(cw, ch) * 0.35;
+                    const angle = ((hashStr(opt + currentStepIndex + currentClicks) % 360) * Math.PI) / 180;
+                    const dist = radius * (0.5 + ((hashStr(opt + 'd' + currentClicks) % 100) / 100) * 0.5);
+                    const posX = cx + Math.cos(angle) * dist;
+                    const posY = cy + Math.sin(angle) * dist;
+
+                    const clickTexts = meta.clickTexts || {};
+                    const displayText = clickTexts[String(currentClicks + 1)] || opt;
+
                     return (
                       <button
                         key={idx}
-                        onClick={() => handleOptionSelected(opt, meta)}
-                        className="p-6 text-left border border-zinc-800 bg-zinc-950/80 rounded-2xl hover:border-white hover:bg-zinc-900 transition-all text-xl font-medium text-white flex items-center justify-between group"
+                        onClick={(e) => { e.stopPropagation(); handleJumpOptionClick(opt, meta); }}
+                        className="p-5 border-2 border-zinc-600 bg-zinc-900/90 rounded-2xl hover:border-white transition-all text-lg font-medium text-white shadow-2xl"
+                        style={{
+                          position: 'absolute',
+                          left: posX + 'px',
+                          top: posY + 'px',
+                          transform: 'translate(-50%, -50%)',
+                          transition: 'all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                          zIndex: 10,
+                          minWidth: '180px',
+                          animation: 'pulse-glow 2s ease-in-out infinite',
+                        }}
                       >
-                        <span>{opt}{isEscapeCaptured && <span className="text-green-400 text-sm ml-2">(已捕獲)</span>}</span>
-                        <div className="flex items-center gap-2">
-                          {hasBranch && <span className="text-[10px] text-zinc-500 font-mono">BRANCH</span>}
-                          <ChevronRight className="w-5 h-5 text-zinc-600 group-hover:text-white transition-colors" />
+                        <div className="text-center">
+                          <div>{displayText}</div>
+                          <div className="text-[10px] text-zinc-400 font-mono mt-1">
+                            {currentClicks}/{clicksNeeded}
+                          </div>
                         </div>
                       </button>
                     );
-                  })}
-                </div>
+                  }
 
-                {/* Escape options (floating) */}
-                {options.map((opt, idx) => {
-                  const meta = optionMeta[opt] || {};
-                  if (meta.behavior !== 'escape') return null;
-                  const clicksNeeded = meta.clicksNeeded || 3;
-                  const currentClicks = escapeClicks[opt] || 0;
-
-                  const rect = optionsContainerRef.current?.getBoundingClientRect();
-                  const cw = rect ? rect.width : 600;
-                  const ch = rect ? rect.height : 500;
-                  const pad = 140;
-                  const randX = (hashStr(opt + currentStepIndex + currentClicks) % 100) / 100;
-                  const randY = (hashStr(opt + 'y' + currentStepIndex * 2 + currentClicks * 3) % 100) / 100;
-                  const posX = pad + randX * Math.max(cw - pad * 2 - 200, 100);
-                  const posY = pad + randY * Math.max(ch - pad * 2 - 80, 60);
-
+                  const hasBranch = meta.nextStepId || (currentStep.content.branches && currentStep.content.branches[opt]);
                   return (
                     <button
                       key={idx}
-                      onClick={(e) => { e.stopPropagation(); handleEscapeOptionClick(opt, meta); }}
-                      className="p-5 border-2 border-zinc-600 bg-zinc-900/90 rounded-2xl hover:border-white transition-all text-lg font-medium text-white shadow-2xl"
-                      style={{
-                        position: 'absolute',
-                        left: posX + 'px',
-                        top: posY + 'px',
-                        transform: 'translate(-50%, -50%)',
-                        transition: 'all 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
-                        zIndex: 10,
-                        minWidth: '180px',
-                        animation: 'pulse-glow 2s ease-in-out infinite',
-                      }}
+                      onClick={() => handleOptionSelected(opt, meta)}
+                      className="p-6 text-left border border-zinc-800 bg-zinc-950/80 rounded-2xl hover:border-white hover:bg-zinc-900 transition-all text-xl font-medium text-white flex items-center justify-between group"
                     >
-                      <div className="text-center">
-                        <div>{opt}</div>
-                        <div className="text-[10px] text-zinc-400 font-mono mt-1">
-                          {currentClicks}/{clicksNeeded} 捕獲
-                        </div>
+                      <span>{opt}</span>
+                      <div className="flex items-center gap-2">
+                        {hasBranch && <span className="text-[10px] text-zinc-500 font-mono">BRANCH</span>}
+                        <ChevronRight className="w-5 h-5 text-zinc-600 group-hover:text-white transition-colors" />
                       </div>
                     </button>
                   );
@@ -505,7 +524,7 @@ export default function PlayerView({ steps, settings, onLogEvent, onRecordAnswer
         />
       </div>
 
-      {effectiveBgmUrl && <AudioPlayer src={effectiveBgmUrl} />}
+      {currentBgmUrl && <AudioPlayer src={currentBgmUrl} />}
     </div>
   );
 }

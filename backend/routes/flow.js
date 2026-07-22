@@ -37,11 +37,12 @@ router.get('/settings', (req, res) => {
 
 // PUT /api/flow/settings - Admin Only
 router.put('/settings', verifyAdminToken, (req, res) => {
-  const { site_title, bgm_url, force_fullscreen } = req.body;
+  const { site_title, bgm_url, bgm_timeline, force_fullscreen } = req.body;
   try {
     const upsert = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');
     if (site_title !== undefined) upsert.run('site_title', String(site_title));
     if (bgm_url !== undefined) upsert.run('bgm_url', String(bgm_url));
+    if (bgm_timeline !== undefined) upsert.run('bgm_timeline', JSON.stringify(bgm_timeline));
     if (force_fullscreen !== undefined) upsert.run('force_fullscreen', String(force_fullscreen));
 
     return res.json({ success: true, message: '設定已更新' });

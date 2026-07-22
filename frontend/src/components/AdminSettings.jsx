@@ -10,6 +10,7 @@ export default function AdminSettings({ token, settings, onSettingsUpdated }) {
   const [siteTitle, setSiteTitle] = useState(settings?.site_title || '神秘互動問答');
   const [bgmUrl, setBgmUrl] = useState(settings?.bgm_url || '');
   const [forceFullscreen, setForceFullscreen] = useState(settings?.force_fullscreen || 'true');
+  const [bgmTimeline, setBgmTimeline] = useState(settings?.bgm_timeline || []);
 
   const [uploading, setUploading] = useState(false);
   const [lastUploadedUrl, setLastUploadedUrl] = useState('');
@@ -19,6 +20,9 @@ export default function AdminSettings({ token, settings, onSettingsUpdated }) {
       setSiteTitle(settings.site_title || '神秘互動問答');
       setBgmUrl(settings.bgm_url || '');
       setForceFullscreen(settings.force_fullscreen || 'true');
+      if (settings.bgm_timeline && Array.isArray(settings.bgm_timeline)) {
+        setBgmTimeline(settings.bgm_timeline);
+      }
     }
   }, [settings]);
 
@@ -63,6 +67,7 @@ export default function AdminSettings({ token, settings, onSettingsUpdated }) {
         body: JSON.stringify({
           site_title: siteTitle,
           bgm_url: bgmUrl,
+          bgm_timeline: bgmTimeline,
           force_fullscreen: forceFullscreen
         })
       });
@@ -147,6 +152,65 @@ export default function AdminSettings({ token, settings, onSettingsUpdated }) {
             儲存全域設定
           </button>
         </div>
+      </div>
+
+      {/* BGM Timeline Section */}
+      <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl space-y-4">
+        <h3 className="text-lg font-bold text-white flex items-center gap-2 border-b border-zinc-800 pb-3">
+          <Music className="w-5 h-5 text-zinc-400" />
+          BGM 時間軸播放列表
+        </h3>
+        <p className="text-xs text-zinc-400">
+          設定多首背景音樂依序輪播，每首播放指定秒數後自動切換下一首。
+        </p>
+
+        <div className="space-y-2">
+          {bgmTimeline.map((item, idx) => (
+            <div key={idx} className="flex gap-2 items-center bg-zinc-950 border border-zinc-800 rounded-xl p-3">
+              <span className="text-xs font-mono text-zinc-500 w-6">{idx + 1}</span>
+              <input
+                type="text"
+                placeholder="/uploads/bgm.mp3"
+                value={item.url}
+                onChange={(e) => {
+                  const updated = [...bgmTimeline];
+                  updated[idx] = { ...updated[idx], url: e.target.value };
+                  setBgmTimeline(updated);
+                }}
+                className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-white min-w-0"
+              />
+              <input
+                type="number"
+                min={5}
+                placeholder="秒數"
+                value={item.duration}
+                onChange={(e) => {
+                  const updated = [...bgmTimeline];
+                  updated[idx] = { ...updated[idx], duration: parseInt(e.target.value) || 30 };
+                  setBgmTimeline(updated);
+                }}
+                className="w-20 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-white"
+              />
+              <button
+                onClick={() => setBgmTimeline(bgmTimeline.filter((_, i) => i !== idx))}
+                className="p-2 text-red-400 hover:text-red-200"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={() => setBgmTimeline([...bgmTimeline, { url: '', duration: 30 }])}
+          className="text-xs text-zinc-300 hover:text-white flex items-center gap-1 font-mono pt-1"
+        >
+          <Plus className="w-3.5 h-3.5" /> 新增 BGM 項目
+        </button>
+
+        <p className="text-[10px] text-zinc-500 font-mono">
+          切換 BGM 時會自動無縫銜接。儲存全域設定後生效。
+        </p>
       </div>
 
       {/* Media Upload Section */}

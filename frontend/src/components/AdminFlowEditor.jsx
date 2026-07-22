@@ -182,11 +182,57 @@ export default function AdminFlowEditor({ token, steps: initialSteps, onSaveSucc
     const currentOptionMeta = activeStep.content.optionMeta || {};
     const stepIds = steps.map(s => ({ id: s.id, title: s.title }));
 
+    const renderClickTexts = (meta, opt) => {
+      if (meta.behavior !== 'jump') return null;
+      const entries = (() => {
+        if (meta.clickTexts && Object.keys(meta.clickTexts).length > 0) {
+          return Object.keys(meta.clickTexts).map(k => ({ k, v: meta.clickTexts[k] }));
+        }
+        return [{ k: '1', v: '' }, { k: '2', v: '' }];
+      })();
+
+      return (
+        <div className="col-span-2 md:col-span-4">
+          <label className="text-[10px] text-zinc-500 block mb-0.5">點擊顯字設定</label>
+          <div className="flex flex-wrap gap-1">
+            {entries.map(({ k, v }) => (
+              <div key={k} className="flex items-center gap-1">
+                <span className="text-[10px] text-zinc-500 w-6">{k}下</span>
+                <input
+                  type="text"
+                  value={v}
+                  onChange={(e) => {
+                    const newClickTexts = { ...(meta.clickTexts || {}) };
+                    newClickTexts[k] = e.target.value;
+                    const newMeta = { ...currentOptionMeta, [opt]: { ...meta, clickTexts: newClickTexts } };
+                    updateActiveContent({ optionMeta: newMeta });
+                  }}
+                  className="w-20 bg-zinc-900 border border-zinc-700 rounded px-1 py-0.5 text-[10px] text-white"
+                />
+              </div>
+            ))}
+            <button
+              onClick={() => {
+                const newClickTexts = { ...(meta.clickTexts || {}) };
+                const nextKey = String(Object.keys(newClickTexts).length + 1);
+                newClickTexts[nextKey] = '';
+                const newMeta = { ...currentOptionMeta, [opt]: { ...meta, clickTexts: newClickTexts } };
+                updateActiveContent({ optionMeta: newMeta });
+              }}
+              className="text-[10px] text-zinc-400 hover:text-white px-1"
+            >
+              + 加
+            </button>
+          </div>
+        </div>
+      );
+    };
+
     return (
       <div className="mt-4 pt-4 border-t border-zinc-800 space-y-3">
         <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1">
           <Volume2 className="w-3.5 h-3.5" />
-          選項進階設定 (音效 / 亂跑 / 點擊次數 / 分支路由)
+          選項進階設定 (音效 / 亂跳 / 點擊次數 / 分支路由)
         </h4>
         {(activeStep.content.options || []).map((opt, oIdx) => {
           const meta = currentOptionMeta[opt] || { behavior: 'normal', clicksNeeded: 1, nextStepId: null, soundEffect: '' };
@@ -205,7 +251,7 @@ export default function AdminFlowEditor({ token, steps: initialSteps, onSaveSucc
                     className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-white"
                   >
                     <option value="normal">一般 (Normal)</option>
-                    <option value="escape">亂跑 (Escape)</option>
+                    <option value="jump">亂跳 (Jump)</option>
                   </select>
                 </div>
                 <div>
@@ -257,6 +303,7 @@ export default function AdminFlowEditor({ token, steps: initialSteps, onSaveSucc
                     </label>
                   </div>
                 </div>
+                {renderClickTexts(meta, opt)}
               </div>
             </div>
           );
@@ -559,8 +606,6 @@ export default function AdminFlowEditor({ token, steps: initialSteps, onSaveSucc
                       </button>
                     </div>
                   )}
-                  
-                  {renderOptionMetaEditor()}
                 </div>
               )}
               

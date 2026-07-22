@@ -160,6 +160,7 @@ function initDatabase() {
   const setStmt = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
   setStmt.run('site_title', '神秘互動問答');
   setStmt.run('bgm_url', '');
+  setStmt.run('bgm_timeline', '[]');
   setStmt.run('force_fullscreen', 'true');
 
   // 4. User Sessions Table

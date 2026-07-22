@@ -35,7 +35,17 @@ export default function App() {
       const settingsData = await settingsRes.json();
 
       if (stepsData.success) setSteps(stepsData.steps || []);
-      if (settingsData.success) setSettings(settingsData.settings || {});
+      if (settingsData.success) {
+        const parsed = { ...settingsData.settings };
+        if (parsed.bgm_timeline && typeof parsed.bgm_timeline === 'string') {
+          try {
+            parsed.bgm_timeline = JSON.parse(parsed.bgm_timeline);
+          } catch {
+            parsed.bgm_timeline = [];
+          }
+        }
+        setSettings(parsed);
+      }
     } catch (err) {
       console.error('Error fetching site data:', err);
     } finally {
