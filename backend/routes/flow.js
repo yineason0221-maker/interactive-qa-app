@@ -195,7 +195,8 @@ router.post('/import-zip', verifyAdminToken, zipUpload.single('backup'), (req, r
   const AdmZip = require('adm-zip');
 
   try {
-    const zip = new AdmZip(backupFile.data);
+    const zipBuffer = backupFile.buffer || backupFile.data;
+    const zip = new AdmZip(zipBuffer);
     const entries = zip.getEntries();
 
     const backupJsonEntry = entries.find(e => !e.isDirectory && e.entryName.replace(/^\.\//, '').split('/').pop() === 'backup.json');
