@@ -183,15 +183,22 @@ router.get('/export', verifyAdminToken, (req, res) => {
     const settings = {};
     settingsRows.forEach(r => { settings[r.key] = r.value; });
 
+    const adminRow = db.prepare('SELECT password_hash FROM admin WHERE id = 1').get();
+    const adminPasswordHash = adminRow ? adminRow.password_hash : '';
+
     const exportData = {
       version: '1.0',
       exportedAt: new Date().toISOString(),
       steps,
-      settings
+      settings,
+      adminPasswordHash
     };
 
+    const jsonBuffer = Buffer.from(JSON.stringify(exportData, null, 2), 'utf8');
+    const encryptedJson = encryptField(jsonBuffer.toString('utf8'));
+
     const zip = new AdmZip();
-    zip.addFile('backup.json', Buffer.from(JSON.stringify(exportData, null, 2), 'utf8'));
+    zip.addFile('backup.json.enc', Buffer.from(encryptedJson, 'utf8'));
 
     const uploadsDir = path.join(__dirname, '../uploads');
     console.log('[Export] Uploads dir:', uploadsDir, 'exists:', fs.existsSync(uploadsDir));
@@ -239,13 +246,22 @@ router.post('/import-zip', verifyAdminToken, zipUpload.single('backup'), (req, r
     const zip = new AdmZip(zipBuffer);
     const entries = zip.getEntries();
 
-    const backupJsonEntry = entries.find(e => !e.isDirectory && e.entryName.replace(/^\.\//, '').split('/').pop() === 'backup.json');
-    if (!backupJsonEntry) {
+    const backupEntry = entries.find(e => !e.isDirectory && ['backup.json', 'backup.json.enc'].includes(e.entryName.replace(/^\.\//, '').split('/').pop()));
+    if (!backupEntry) {
       const names = entries.map(e => e.entryName).join(', ');
       return res.status(400).json({ error: `備份檔案中缺少 backup.json，zip 內容: ${names}` });
     }
 
-    const backupData = JSON.parse(backupJsonEntry.getData().toString('utf8'));
+    let backupData;
+    const entryName = backupEntry.entryName.replace(/^\.\//, '').split('/').pop();
+    if (entryName === 'backup.json.enc') {
+      const encrypted = backupEntry.getData().toString('utf8');
+      const decrypted = decryptField(encrypted);
+      backupData = JSON.parse(decrypted);
+    } else {
+      backupData = JSON.parse(backupEntry.getData().toString('utf8'));
+    }
+
     if (!backupData.steps || !Array.isArray(backupData.steps)) {
       return res.status(400).json({ error: '無效的備份資料格式' });
     }
@@ -269,6 +285,10 @@ router.post('/import-zip', verifyAdminToken, zipUpload.single('backup'), (req, r
           JSON.stringify(step.content || {})
         );
       });
+
+      if (backupData.adminPasswordHash) {
+        db.prepare('UPDATE admin SET password_hash = ? WHERE id = 1').run(backupData.adminPasswordHash);
+      }
     });
 
     importTransaction();
