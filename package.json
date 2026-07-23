@@ -3,6 +3,11 @@
   "private": true,
   "scripts": {
     "build": "cd backend && npm install && cd ../frontend && npm install && npm run build",
-    "start": "cd backend && node server.js"
+    "start": "cd backend && node server.js",
+    "deploy": "wrangler deploy",
+    "preview": "wrangler dev"
+  },
+  "devDependencies": {
+    "wrangler": "^4.113.0"
   }
 }
