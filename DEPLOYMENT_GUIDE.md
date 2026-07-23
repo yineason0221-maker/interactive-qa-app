@@ -74,9 +74,13 @@ npx wrangler secret put JWT_SECRET
 
 Cloudflare 會在你每次 push 後自動部署。
 
+如果你是把整個 `interactive-qa-app` 倉庫連上去，而 Cloudflare 真正要部署的是 `cloudflare-migration` 這個子資料夾，請到 `Settings > Build` 把 `Root directory` 改成 `cloudflare-migration`。Workers Builds 會在那個資料夾裡尋找 `wrangler.jsonc`，並在那裡執行 build / deploy。
+
 ### 6. Build 設定
 
 這個副本的 build 目標是先把前端打包，再交給 Workers 提供靜態檔。
+
+注意：Cloudflare Workers Builds 會依照這個專案的 `package.json` 安裝 `wrangler`。這個副本已經把 `wrangler` 提升到 `^3.91.0`，因為 `wrangler.jsonc` 需要這個版本以上才正式支援。
 
 建議 build command：
 
