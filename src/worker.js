@@ -123,55 +123,12 @@ async function ensureInitialized(env) {
 }
 
 async function initializeDatabase(env) {
-  await env.DB.exec(`
-    CREATE TABLE IF NOT EXISTS admin (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      password_hash TEXT NOT NULL,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS steps (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      order_index INTEGER NOT NULL,
-      type TEXT NOT NULL,
-      title TEXT NOT NULL,
-      content_json TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS sessions (
-      session_id TEXT PRIMARY KEY,
-      nickname TEXT,
-      start_time DATETIME NOT NULL,
-      end_time DATETIME,
-      duration_seconds INTEGER DEFAULT 0,
-      device_info TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS answers (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      session_id TEXT NOT NULL,
-      step_id INTEGER,
-      step_title TEXT,
-      question_text TEXT,
-      answer_value TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY(session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      session_id TEXT NOT NULL,
-      event_type TEXT NOT NULL,
-      detail TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY(session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
-    );
-  `);
+  await execute(env, 'CREATE TABLE IF NOT EXISTS admin (id INTEGER PRIMARY KEY AUTOINCREMENT, password_hash TEXT NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
+  await execute(env, 'CREATE TABLE IF NOT EXISTS steps (id INTEGER PRIMARY KEY AUTOINCREMENT, order_index INTEGER NOT NULL, type TEXT NOT NULL, title TEXT NOT NULL, content_json TEXT NOT NULL)');
+  await execute(env, 'CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+  await execute(env, 'CREATE TABLE IF NOT EXISTS sessions (session_id TEXT PRIMARY KEY, nickname TEXT, start_time DATETIME NOT NULL, end_time DATETIME, duration_seconds INTEGER DEFAULT 0, device_info TEXT)');
+  await execute(env, 'CREATE TABLE IF NOT EXISTS answers (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, step_id INTEGER, step_title TEXT, question_text TEXT, answer_value TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(session_id) REFERENCES sessions(session_id) ON DELETE CASCADE)');
+  await execute(env, 'CREATE TABLE IF NOT EXISTS logs (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, event_type TEXT NOT NULL, detail TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(session_id) REFERENCES sessions(session_id) ON DELETE CASCADE)');
 
   const adminRow = await queryFirst(env, 'SELECT id FROM admin WHERE id = ?', [1]);
   if (!adminRow) {
