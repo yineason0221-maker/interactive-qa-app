@@ -124,8 +124,6 @@ async function ensureInitialized(env) {
 
 async function initializeDatabase(env) {
   await env.DB.exec(`
-    PRAGMA foreign_keys = ON;
-
     CREATE TABLE IF NOT EXISTS admin (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       password_hash TEXT NOT NULL,
