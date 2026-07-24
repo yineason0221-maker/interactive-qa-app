@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "npm run build && npx wrangler dev",
     "build": "cd frontend && npm ci && npm run build",
-    "deploy": "npm run build && npx wrangler deploy --yes"
+    "deploy": "npm run build && npx wrangler deploy"
   },
   "dependencies": {
     "adm-zip": "^0.5.10",

@@ -81,7 +81,7 @@ Cloudflare 會在你每次 push 後自動部署。
 這個副本的 build 目標是先把前端打包，再交給 Workers 提供靜態檔。
 
 注意：Cloudflare Workers Builds 會依照這個專案的 `package.json` 安裝 `wrangler`。這個副本已經把 `wrangler` 提升到 `^3.91.0`，因為 `wrangler.jsonc` 需要這個版本以上才正式支援。
-如果你在 Cloudflare 後台把 Deploy command 設成 `npm run deploy`，現在這個腳本會自動改用 `npx wrangler deploy --yes`，比較不會卡在本機安裝版。
+Cloudflare 後台的 Deploy command 請直接填 `npx wrangler deploy`。這個副本已經有 `wrangler.jsonc`，所以不需要 `--yes`；`package.json` 裡的 `deploy` script 只是本機方便用。
 
 建議 build command：
 
