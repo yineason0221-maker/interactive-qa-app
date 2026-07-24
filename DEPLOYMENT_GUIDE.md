@@ -102,6 +102,8 @@ npm run build
 1. `*.workers.dev` 預設網址
 2. 你自己的自訂網域
 
+如果部署成功但你在 Dashboard 看到 `No URLs enabled`，請到 Workers 的 `Domains` 頁面把 `workers.dev` 打開；這會產生免費的公開網址。
+
 對外分享時，直接使用這個網址即可。
 
 ## 本機開發
