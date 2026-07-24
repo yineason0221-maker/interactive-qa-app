@@ -30,6 +30,22 @@ function errorResponse(message, status = 400) {
   return jsonResponse({ error: message }, status);
 }
 
+function unexpectedErrorResponse(request, err) {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error('Unhandled Worker exception:', err);
+
+  if (request.url && new URL(request.url).pathname.startsWith('/api/')) {
+    return errorResponse(`Worker 發生例外: ${message}`, 500);
+  }
+
+  return new Response(`Worker 發生例外: ${message}`, {
+    status: 500,
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8'
+    }
+  });
+}
+
 function nowUtc() {
   return new Date().toISOString().slice(0, 19) + 'Z';
 }
@@ -83,13 +99,14 @@ function decryptField(env, encryptedText) {
 async function queryAll(env, sql, params = []) {
   const stmt = env.DB.prepare(sql);
   const bound = params.length ? stmt.bind(...params) : stmt;
-  const result = await bound.run();
+  const result = await bound.all();
   return result.results || [];
 }
 
 async function queryFirst(env, sql, params = []) {
-  const rows = await queryAll(env, sql, params);
-  return rows.length > 0 ? rows[0] : null;
+  const stmt = env.DB.prepare(sql);
+  const bound = params.length ? stmt.bind(...params) : stmt;
+  return await bound.first();
 }
 
 async function execute(env, sql, params = []) {
@@ -162,7 +179,7 @@ async function initializeDatabase(env) {
   if (!adminRow) {
     const defaultPassword = env.ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD;
     const defaultHash = crypto.pbkdf2Sync(defaultPassword, 'admin-salt', 120000, 32, 'sha256').toString('hex');
-    await execute(env, 'INSERT INTO admin (id, password_hash) VALUES (?, ?)', [1, `pbkdf2$120000$admin-salt$${defaultHash}`]);
+    await execute(env, 'INSERT OR IGNORE INTO admin (id, password_hash) VALUES (?, ?)', [1, `pbkdf2$120000$admin-salt$${defaultHash}`]);
   }
 
   const stepCountRow = await queryFirst(env, 'SELECT COUNT(*) AS count FROM steps');
@@ -818,25 +835,29 @@ async function routeApi(env, request, pathname) {
 
 export default {
   async fetch(request, env) {
-    const url = new URL(request.url);
-    const { pathname } = url;
+    try {
+      const url = new URL(request.url);
+      const { pathname } = url;
 
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders() });
+      if (request.method === 'OPTIONS') {
+        return new Response(null, { status: 204, headers: corsHeaders() });
+      }
+
+      if (pathname === '/api/health') {
+        return jsonResponse({ status: 'ok', time: new Date().toISOString() });
+      }
+
+      await ensureInitialized(env);
+
+      if (pathname.startsWith('/api/')) {
+        const response = await routeApi(env, request, pathname);
+        if (response) return response;
+        return errorResponse('API 路由不存在', 404);
+      }
+
+      return env.ASSETS.fetch(request);
+    } catch (err) {
+      return unexpectedErrorResponse(request, err);
     }
-
-    if (pathname === '/api/health') {
-      return jsonResponse({ status: 'ok', time: new Date().toISOString() });
-    }
-
-    await ensureInitialized(env);
-
-    if (pathname.startsWith('/api/')) {
-      const response = await routeApi(env, request, pathname);
-      if (response) return response;
-      return errorResponse('API 路由不存在', 404);
-    }
-
-    return env.ASSETS.fetch(request);
   }
 };
