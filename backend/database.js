@@ -21,7 +21,7 @@ function initDatabase() {
   // Insert default admin password if not exists
   const adminRow = db.prepare('SELECT * FROM admin WHERE id = 1').get();
   if (!adminRow) {
-    const defaultPasswordHash = bcrypt.hashSync('admin', 10);
+    const defaultPasswordHash = bcrypt.hashSync('admin', 8);
     db.prepare('INSERT INTO admin (id, password_hash) VALUES (1, ?)').run(defaultPasswordHash);
     console.log('[DB Init] Created default admin password: admin');
   }

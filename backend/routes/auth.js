@@ -47,7 +47,7 @@ router.post('/change-password', verifyAdminToken, (req, res) => {
     return res.status(400).json({ error: '舊密碼不正確' });
   }
 
-  const newHash = bcrypt.hashSync(newPassword, 10);
+  const newHash = bcrypt.hashSync(newPassword, 8);
       db.prepare('UPDATE admin SET password_hash = ?, updated_at = strftime(\'%Y-%m-%dT%H:%M:%S\', \'now\', \'localtime\') WHERE id = 1').run(newHash);
 
   return res.json({
