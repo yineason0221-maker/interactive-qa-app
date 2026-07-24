@@ -1,0 +1,16 @@
+{
+  "name": "interactive-qa-cloudflare",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npm run build && npx wrangler dev",
+    "build": "cd frontend && npm ci && npm run build",
+    "deploy": "npm run build && npx wrangler deploy"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.10",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "wrangler": "^3.91.0"
+  }
+}
